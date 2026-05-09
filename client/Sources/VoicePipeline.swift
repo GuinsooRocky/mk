@@ -17,9 +17,18 @@ final class VoicePipeline {
 
         // L1: 信任 Apple 官方排序；额外做字典反向纠错（音译→正字，如 SAG→SVG）
         // 字典已加载（VoiceModule 在 startRecording 时调过 ContextEnhancer.enhance）
-        let l1Text = CorrectionDictionary.shared.correct(rawText)
+        var l1Text = CorrectionDictionary.shared.correct(rawText)
         if l1Text != rawText {
             Logger.log("Pipeline", "Corrected: \(rawText) → \(l1Text)")
+        }
+
+        // FR4 v0.1：中文口语 → 标点符号（仅独立 token，避免误伤）
+        if (RuntimeConfig.shared.polishConfig["fr4_punctuation_enabled"] as? Bool) ?? true {
+            let normalized = PunctuationNormalizer.apply(l1Text)
+            if normalized != l1Text {
+                Logger.log("Pipeline", "Punct: \(l1Text) → \(normalized)")
+                l1Text = normalized
+            }
         }
 
         // L2: 模型润色（polish.enabled = false 时跳过）

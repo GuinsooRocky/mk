@@ -80,11 +80,14 @@ final class VoiceSession {
         }
         Logger.log("Voice", "Using locale: \(bestLocale.identifier(.bcp47))")
 
-        // 2. 配置 SpeechTranscriber（volatile 给 UI 实时回显，confidence 给服务端蒸馏用）
+        // 2. 配置 SpeechTranscriber
+        // - volatileResults: 实时回显
+        // - alternativeTranscriptions: 给每个 final segment 拿候选列表（C1 用于英文 rescue）
+        // - confidence/timeRange: 词级置信度 + 时间，给字典纠错和服务端蒸馏用
         let transcriber = SpeechTranscriber(
             locale: bestLocale,
             transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
+            reportingOptions: [.volatileResults, .alternativeTranscriptions],
             attributeOptions: [.audioTimeRange, .transcriptionConfidence]
         )
         self.transcriber = transcriber
@@ -128,7 +131,17 @@ final class VoiceSession {
                         let words = self.extractWords(from: result.text)
                         self.allWords.append(contentsOf: words)
 
-                        Logger.log("Voice", "Final segment: \(text) (\(words.count) words)")
+                        // C1 阶段 1：观察 SA 给的候选数据
+                        let alts = result.alternatives.map { String($0.characters) }
+                        let altsExceptBest = alts.filter { $0 != text }
+                        if !altsExceptBest.isEmpty {
+                            Logger.log("Voice", "Final segment: \(text) (\(words.count) words, \(alts.count) alts)")
+                            for (i, alt) in altsExceptBest.prefix(5).enumerated() {
+                                Logger.log("Voice", "  alt[\(i)]: \(alt)")
+                            }
+                        } else {
+                            Logger.log("Voice", "Final segment: \(text) (\(words.count) words, no alts)")
+                        }
                     } else {
                         self.volatileText = text
                         self.onPartialResult?(self.finalizedText + text)

@@ -14,8 +14,8 @@
 #
 # 反向纠错（C2）：用 `|` 分隔挂"错音"，识别后自动替换为正字
 #   语法：  正字 | 错音1 | 错音2 ...
-#   示例：  SVG | SAG | S A G        ← 听到 SAG/S A G 自动改回 SVG
-#          SwiftUI | Swift U I | swift you ai
+#   示例：  SVG | SAG | S A G | SVJ        ← 听到 SAG/S A G 自动改回 SVG
+#          SwiftUI | Swift U I | swift you ai | Swift UI | swit fut UI | swif克 | sw克
 #   原理：长错音优先匹配，避免短串覆盖长串
 #
 # 比 JSON 格式更易编辑；如要保留 errors/frequency 元信息用 .json 版本
@@ -26,7 +26,7 @@ Anthropic | antropic
 Cursor | 卡索
 
 # === Apple / macOS ===
-SwiftUI | Swift U I | swift you ai
+SwiftUI | Swift U I | swift you ai | Swift UI | swit fut UI | swif克 | sw克
 SpeechAnalyzer | speech analyser | speech 分析
 Swift
 Xcode | X code
@@ -63,7 +63,7 @@ Vite
 Jotai
 
 # === 前端 UI / 资源（高频，PlusIcon/SVG 类） ===
-PlusIcon | Plus I can | PlusIc | Plus icon
+PlusIcon | Plus I can | PlusIc | Plus icon | plus I cn | plus I can diewe | can diewe
 MinusIcon | Minus I can | Minus icon
 ChevronIcon | Chevron icon
 ArrowIcon | Arrow icon
@@ -71,7 +71,7 @@ CloseIcon | Close icon
 SearchIcon | Search icon
 MenuIcon | Menu icon
 Icon
-SVG | SAG | S A G
+SVG | SAG | S A G | SVJ
 PNG | P N G
 JPG | J P G
 JPEG | J peg

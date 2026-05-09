@@ -22,8 +22,18 @@ final class VoicePipeline {
             Logger.log("Pipeline", "Corrected: \(rawText) → \(l1Text)")
         }
 
+        // FR5：口语 filler / 重复词清洗（在标点之前，否则标点出现后 \1 backref 不连续）
+        let polishConf = RuntimeConfig.shared.polishConfig
+        if (polishConf["fr5_filler_enabled"] as? Bool) ?? true {
+            let cleaned = FillerRemover.apply(l1Text)
+            if cleaned != l1Text {
+                Logger.log("Pipeline", "Filler: \(l1Text) → \(cleaned)")
+                l1Text = cleaned
+            }
+        }
+
         // FR4 v0.1：中文口语 → 标点符号（仅独立 token，避免误伤）
-        if (RuntimeConfig.shared.polishConfig["fr4_punctuation_enabled"] as? Bool) ?? true {
+        if (polishConf["fr4_punctuation_enabled"] as? Bool) ?? true {
             let normalized = PunctuationNormalizer.apply(l1Text)
             if normalized != l1Text {
                 Logger.log("Pipeline", "Punct: \(l1Text) → \(normalized)")

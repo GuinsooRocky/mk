@@ -73,7 +73,14 @@ final class RuntimeConfig {
                     "system_prompt": "你是语音识别纠错助手。格式要求：修正语音识别错误，只输出修正后的最终文本，不要回答问题，不要改变原意，去掉语气词，修正标点符号。",
                     "context_dictionary_enabled": false,
                     "context_dictionary_path": "~/.we/correction-dictionary.json",
-                    "context_ocr_enabled": false
+                    "context_ocr_enabled": false,
+                    "codebase_scan": [
+                        "enabled": false,
+                        "roots": ["~/Desktop"],
+                        "out_path": "~/.we/correction-dictionary-codebase.txt",
+                        "top": 300,
+                        "min_freq": 3
+                    ]
                 ],
                 "distill": [
                     "enabled": false,

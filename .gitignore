@@ -37,6 +37,7 @@ server/eval/We数据评估*.md
 # Datasets (too large, download separately)
 Datasets/
 server/eval/datasets/
+test-audio/
 
 # Data (user-specific)
 *.jsonl

@@ -16,6 +16,20 @@ enum ContextEnhancer {
 
     /// 组合字典术语和屏幕 OCR 关键词
     /// - 两个开关由 config.polish.context_{dictionary,ocr}_enabled 控制
+    /// 便捷入口：从 polish 配置一次性 resolve paths（含 active_domains + learned）后调用 enhance。
+    /// 推荐 callers（VoiceModule / MeetingSession 等）走这个，避免各处重复构造 paths。
+    static func enhance(for app: AppIdentity?, polish: [String: Any]) async -> [String] {
+        let dictEnabled = polish["context_dictionary_enabled"] as? Bool ?? false
+        let dictPaths = CorrectionDictionary.resolveEnabledPaths(polish: polish)
+        let ocrEnabled = polish["context_ocr_enabled"] as? Bool ?? false
+        return await enhance(
+            for: app,
+            dictionaryEnabled: dictEnabled,
+            dictionaryPaths: dictPaths,
+            ocrEnabled: ocrEnabled
+        )
+    }
+
     static func enhance(
         for app: AppIdentity?,
         dictionaryEnabled: Bool,

@@ -40,6 +40,110 @@ struct WEApp {
             return
         }
 
+        // 音频裁剪/拼接：MK --trim ... 或 MK --concat ...
+        if CommandLine.arguments.contains("--trim") || CommandLine.arguments.contains("--concat") {
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task {
+                await AudioTrimmer.run()
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
+        // 错例反馈学习：MK --learn "错音" "正字"
+        // 追加到 ~/.we/correction-dictionary-learned.txt + reload；幂等（同条不重复）
+        if let idx = CommandLine.arguments.firstIndex(of: "--learn"),
+           idx + 2 < CommandLine.arguments.count {
+            let wrong = CommandLine.arguments[idx + 1]
+            let correct = CommandLine.arguments[idx + 2]
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                WEDataDir.ensureExists()
+                let result = DictionaryLearner.learn(wrong: wrong, correct: correct)
+                print(result)
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
+        // 完整 pipeline 自检：MK --test-pipeline "raw text"
+        // dict.correct → FillerRemover → PunctuationNormalizer，逐步打印
+        if let idx = CommandLine.arguments.firstIndex(of: "--test-pipeline"),
+           idx + 1 < CommandLine.arguments.count {
+            let raw = CommandLine.arguments[idx + 1]
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                WEDataDir.ensureExists()
+                let polish = RuntimeConfig.shared.polishConfig
+                if let cap = polish["dict_max_terms"] as? Int, cap > 0 { CorrectionDictionary.maxHintTerms = cap }
+                if let cap = polish["dict_max_correction_terms"] as? Int, cap > 0 { CorrectionDictionary.maxCorrectionTerms = cap }
+                let paths = CorrectionDictionary.resolveEnabledPaths(polish: polish)
+                if !paths.isEmpty { CorrectionDictionary.shared.loadAll(from: paths) }
+
+                print("---")
+                print("RAW:    \(raw)")
+                let s1 = CorrectionDictionary.shared.correct(raw)
+                print("DICT:   \(s1)")
+                let s2 = FillerRemover.apply(s1)
+                print("FILLER: \(s2)")
+                let s3 = PunctuationNormalizer.apply(s2)
+                print("PUNCT:  \(s3)")
+                print("---")
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
+        // 字典纠错自检：MK --test-dict-correct "raw text"
+        // 把字典加载好后跑 correct() 打印 in/out（验证 Levenshtein + corrections 桥接）
+        if let idx = CommandLine.arguments.firstIndex(of: "--test-dict-correct"),
+           idx + 1 < CommandLine.arguments.count {
+            let raw = CommandLine.arguments[idx + 1]
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                WEDataDir.ensureExists()
+                let polish = RuntimeConfig.shared.polishConfig
+                if let cap = polish["dict_max_terms"] as? Int, cap > 0 { CorrectionDictionary.maxHintTerms = cap }
+                if let cap = polish["dict_max_correction_terms"] as? Int, cap > 0 { CorrectionDictionary.maxCorrectionTerms = cap }
+                let paths = CorrectionDictionary.resolveEnabledPaths(polish: polish)
+                if !paths.isEmpty { CorrectionDictionary.shared.loadAll(from: paths) }
+                let result = CorrectionDictionary.shared.correct(raw)
+                print("---")
+                print("IN:  \(raw)")
+                print("OUT: \(result)")
+                print("---")
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
+        // codebase 扫码自检：MK --test-codebase-scan
+        // 直接跑 scheduleBackgroundScan() + 等扫完，不起 menubar/hotkey
+        if CommandLine.arguments.contains("--test-codebase-scan") {
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task {
+                await MainActor.run {
+                    WEDataDir.ensureExists()
+                    _ = RuntimeConfig.shared
+                    CodebaseScanner.scheduleBackgroundScan()
+                }
+                // python 扫几秒～几十秒；给最多 90s
+                try? await Task.sleep(nanoseconds: 90_000_000_000)
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
         // 评估模式：WE --bench-meeting <wav-file> [--locale zh-CN] [--output result.json]
         if CommandLine.arguments.contains("--bench-meeting") {
             let app = NSApplication.shared
@@ -230,14 +334,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 预加载字典（避免首次按热键 50-100ms 延迟 + 立即可见 multi-path 日志）
         let polish = config.polishConfig
+        // 从配置注入字典硬上限（防膨胀）；缺省走默认 800/300
+        if let cap = polish["dict_max_terms"] as? Int, cap > 0 {
+            CorrectionDictionary.maxHintTerms = cap
+        }
+        if let cap = polish["dict_max_correction_terms"] as? Int, cap > 0 {
+            CorrectionDictionary.maxCorrectionTerms = cap
+        }
         if (polish["context_dictionary_enabled"] as? Bool) ?? false {
-            var paths: [String] = []
-            if let p = polish["context_dictionary_path"] as? String, !p.isEmpty { paths.append(p) }
-            if let extras = polish["context_dictionary_paths"] as? [String] { paths.append(contentsOf: extras) }
+            let paths = CorrectionDictionary.resolveEnabledPaths(polish: polish)
             if !paths.isEmpty {
                 CorrectionDictionary.shared.loadAll(from: paths)
             }
         }
+
+        // 后台扫码：mtime 变了才跑，跑完自动 reload 字典
+        CodebaseScanner.scheduleBackgroundScan()
 
         // 初始化菜单栏
         statusBar = StatusBarController(moduleManager: moduleManager)

@@ -47,29 +47,167 @@ final class CorrectionDictionary {
             return false
         }
 
+        // C5：自动派生错音变体（不覆盖手动 `|` 显式登记的）
+        var corrections = p.corrections
+        var synthesized = 0
+        for term in p.terms {
+            for variant in Self.synthesizeVariants(for: term) where corrections[variant] == nil {
+                corrections[variant] = term
+                synthesized += 1
+            }
+        }
+
         terms = p.terms
-        corrections = p.corrections
+        self.corrections = corrections
         sortedErrorKeys = corrections.keys.sorted { $0.count > $1.count }
         loadedPath = expanded
-        Logger.log("Dict", "Loaded \(p.terms.count) terms + \(p.corrections.count) corrections from \(expanded)")
+        Logger.log("Dict", "Loaded \(p.terms.count) terms + \(p.corrections.count) corrections (manual=\(p.corrections.count - synthesized), synth=\(synthesized)) from \(expanded)")
         return true
     }
 
-    /// 应用反向纠错：扫描 text 把已知错音替换为正字
-    /// 长错音优先匹配，避免短词把长词的子串提前替换掉
+    // MARK: - C5 synthesizeVariants
+
+    /// ASR 字符级常见混淆表（中文模型把英文字母/缩写听错的常见替换）
+    /// 表是经验性的，发现新错音模式直接加一行
+    private static let confusionTable: [Character: [Character]] = [
+        "V": ["A", "J", "F", "B"],
+        "G": ["J", "C"],
+        "B": ["P", "V", "D"],
+        "M": ["N"],
+        "S": ["X", "C", "F"],
+        "Z": ["S", "C"],
+        "X": ["S", "K"]
+    ]
+
+    /// 给一个 term 生成可能的错音变体（加载时一次性派生）
+    static func synthesizeVariants(for term: String) -> [String] {
+        var variants = Set<String>()
+
+        // 规则 1：全大写缩写（≤6 字符纯字母）
+        if term.count >= 2 && term.count <= 6,
+           term.allSatisfy({ $0.isLetter && $0.isUppercase }) {
+            // 1a. 字母间空格："SVG" → "S V G"
+            variants.insert(term.map { String($0) }.joined(separator: " "))
+            // 1b. 字母替换
+            let chars = Array(term)
+            for (i, ch) in chars.enumerated() {
+                if let alts = confusionTable[ch] {
+                    for alt in alts {
+                        var copy = chars
+                        copy[i] = alt
+                        variants.insert(String(copy))
+                    }
+                }
+            }
+        }
+
+        // 规则 2：驼峰命名（含大小写边界，无空格）
+        if !term.contains(" "),
+           zip(term, term.dropFirst()).contains(where: { $0.isLowercase && $1.isUppercase }) {
+            // 2a. 拆词："SwiftUI" → "Swift UI"
+            var spaced = ""
+            for (i, ch) in term.enumerated() {
+                if i > 0 {
+                    let prev = term[term.index(term.startIndex, offsetBy: i - 1)]
+                    if prev.isLowercase && ch.isUppercase {
+                        spaced.append(" ")
+                    }
+                }
+                spaced.append(ch)
+            }
+            variants.insert(spaced)
+            // 2b. 拆词后小写
+            variants.insert(spaced.lowercased())
+        }
+
+        // 规则 3：保底加全小写（"SwiftUI" → "swiftui"，"SVG" → "svg"）
+        let lower = term.lowercased()
+        if lower != term {
+            variants.insert(lower)
+        }
+
+        variants.remove(term)  // 不与原词冲突
+        return Array(variants)
+    }
+
+    /// 应用反向纠错（两层）：
+    /// 1. 精确字符串替换（含 C5 派生的 corrections）— O(1) 哈希查找，<1ms
+    /// 2. Levenshtein 模糊匹配 — 对未命中的英文 token 找距离最近的 term，5-15ms
+    ///    阈值: max(1, token.count / 4)（"SwiftUI"=8字 → 容忍 2 字符差，"SVG"=3字 → 容忍 1 字符差）
     func correct(_ text: String) -> String {
-        guard !sortedErrorKeys.isEmpty else { return text }
         var result = text
         var hits: [String] = []
-        for err in sortedErrorKeys {
-            guard let correct = corrections[err], result.contains(err) else { continue }
-            result = result.replacingOccurrences(of: err, with: correct)
-            hits.append("\(err)→\(correct)")
+
+        // Layer 1: 精确字符串替换
+        if !sortedErrorKeys.isEmpty {
+            for err in sortedErrorKeys {
+                guard let correct = corrections[err], result.contains(err) else { continue }
+                result = result.replacingOccurrences(of: err, with: correct)
+                hits.append("=\(err)→\(correct)")
+            }
         }
+
+        // Layer 2: Levenshtein 模糊匹配（兜底未命中的英文 token）
+        let asciiTerms = terms.filter { $0.allSatisfy { $0.isASCII && ($0.isLetter || $0 == " ") } && $0.count >= 2 }
+        if !asciiTerms.isEmpty {
+            // tokenize: 按空格/中文/标点切分
+            let tokens = result.split(whereSeparator: { !$0.isASCII || $0.isWhitespace || $0.isPunctuation })
+            var processed = Set<String>()  // 避免对同一 token 重复处理
+            for token in tokens {
+                let tok = String(token)
+                guard tok.count >= 2,
+                      tok.allSatisfy({ $0.isASCII && $0.isLetter }),
+                      !asciiTerms.contains(tok),  // 已是字典正字，跳过
+                      !processed.contains(tok) else { continue }
+                processed.insert(tok)
+
+                let maxDist = max(1, tok.count / 4)
+                var best: (term: String, dist: Int)?
+                for term in asciiTerms {
+                    // 长度差 > maxDist 直接 skip（O(1) 早 reject）
+                    if abs(term.count - tok.count) > maxDist { continue }
+                    let d = Self.levenshtein(tok, term)
+                    if d <= maxDist && d > 0 && (best == nil || d < best!.dist) {
+                        best = (term, d)
+                    }
+                }
+                if let b = best {
+                    result = result.replacingOccurrences(of: tok, with: b.term)
+                    hits.append("~\(tok)→\(b.term)(d=\(b.dist))")
+                }
+            }
+        }
+
         if !hits.isEmpty {
             Logger.log("Dict", "correct: \(hits.joined(separator: ", "))")
         }
         return result
+    }
+
+    /// 经典 Damerau-Lite Levenshtein（不含相邻交换）。两行 DP，O(m×n)
+    static func levenshtein(_ a: String, _ b: String) -> Int {
+        let aArr = Array(a)
+        let bArr = Array(b)
+        let m = aArr.count
+        let n = bArr.count
+        if m == 0 { return n }
+        if n == 0 { return m }
+
+        var dp = Array(0...n)
+        for i in 1...m {
+            var prev = dp[0]
+            dp[0] = i
+            for j in 1...n {
+                let temp = dp[j]
+                if aArr[i - 1] == bArr[j - 1] {
+                    dp[j] = prev
+                } else {
+                    dp[j] = 1 + min(prev, min(dp[j - 1], dp[j]))
+                }
+                prev = temp
+            }
+        }
+        return dp[n]
     }
 
     // MARK: - parsing

@@ -8,6 +8,25 @@
 
 ---
 
+## ⬇️ 直接下载（v0.2.0）
+
+[**📦 MK-v0.2.0.zip（4.1MB）→ 点击下载**](https://github.com/GuinsooRocky/mike/releases/download/v0.2.0/MK-v0.2.0.zip)
+
+> 全部 release 列表：[github.com/GuinsooRocky/mike/releases](https://github.com/GuinsooRocky/mike/releases)
+
+### 首次安装 3 步（自签 Gatekeeper 绕过）
+
+1. **解压** zip → 拖 `MK.app` 到 `/Applications/`
+2. **右键** MK.app → **打开** → 弹窗选「**仍要打开**」（自签必须，之后正常双击）
+3. 系统设置 → 隐私与安全性 → 授权 **麦克风 / 语音识别 / 辅助功能**
+
+按住 **右 Option** 说话，松开 → 文字落到光标。
+
+> ⚠️ Gatekeeper 提醒：本 .app 是 **MK Development 自签**，不是 Apple Developer ID。Mac 直接双击会被拦——**必须右键 Open** 走人工授权。
+> 要彻底解决需要 Apple Developer ID（$99/年），暂未做。
+
+---
+
 ## 为什么有这个项目
 
 ### 痛点
@@ -68,6 +87,12 @@
 ---
 
 ## 安装
+
+### 方式 A：下载预编译版（普通用户）
+
+直接看本页顶部 [⬇️ 直接下载](#-直接下载v020) — 解压 + 右键 Open + 授权。
+
+### 方式 B：从源码编译（开发者）
 
 ```bash
 git clone https://github.com/GuinsooRocky/mike.git
@@ -209,12 +234,6 @@ killall MK; open .build/MK.app                       # 重启验证
 调试日志：`tail -f ~/.we/debug.log`
 
 ---
-
-## 致谢
-
-Fork 自 [Marvinngg/ambient-voice](https://github.com/Marvinngg/ambient-voice)（116 stars）。
-保留底层音频采集 + SpeechAnalyzer 集成 + 部分 UI 基础设施。
-重做：品牌 / push-to-talk / 字典纠错管线 / FR4 normalizer / codebase 自动扫。
 
 ## License
 

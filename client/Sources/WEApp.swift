@@ -214,7 +214,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
     private let moduleManager = ModuleManager()
     private let config = RuntimeConfig.shared
-    private let recordingIndicator = RecordingIndicator()
     private let remoteInbox = RemoteInbox()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -233,13 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let voiceModule = VoiceModule()
         voiceModule.onStateChange = { [weak self] state in
             guard let self else { return }
-            let recording = state == .recording
-            self.statusBar?.setRecording(recording)
-            if recording {
-                self.recordingIndicator.show()
-            } else {
-                self.recordingIndicator.hide()
-            }
+            self.statusBar?.setRecording(state == .recording)
         }
         moduleManager.register(voiceModule)
 

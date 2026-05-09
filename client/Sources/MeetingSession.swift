@@ -582,7 +582,7 @@ final class MeetingSession {
             diarizer.initialize(models: models)
 
             Logger.log("Meeting", "Running diarization...")
-            let result = try diarizer.performCompleteDiarization(buffer, sampleRate: diarizationSampleRate)
+            let result = try await diarizer.performCompleteDiarization(buffer, sampleRate: diarizationSampleRate)
 
             Logger.log("Meeting", "Diarization complete: \(result.segments.count) speaker segments")
             for seg in result.segments {

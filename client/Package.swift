@@ -9,11 +9,14 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "WE",
+            name: "MK",
             dependencies: [
                 .product(name: "FluidAudio", package: "FluidAudio")
             ],
-            path: "Sources"
+            path: "Sources",
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
+            ]
         )
     ]
 )

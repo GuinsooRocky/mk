@@ -40,27 +40,25 @@ final class StatusBarController {
     private func updateIcon() {
         guard let button = statusItem.button else { return }
 
-        if isRecording {
-            button.title = "WE●"
-            button.contentTintColor = .systemRed
-            return
-        }
+        let baseFont = NSFont.menuBarFont(ofSize: 0)
+        let boldFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
 
+        // 录音视觉反馈交给 macOS 系统橙点；MK 始终只显示文字保持最小宽度
+        button.image = nil
         button.contentTintColor = nil
-        switch ModelServer.shared.status {
-        case .connected:
-            button.title = "WE"
-        case .disconnected:
-            button.title = "WE·"
-        case .unknown:
-            button.title = "WE?"
-        }
+        button.attributedTitle = NSAttributedString(
+            string: "MK",
+            attributes: [
+                .font: boldFont,
+                .foregroundColor: NSColor.labelColor
+            ]
+        )
     }
 
     private func setupMenu() {
         let menu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "WE 语音输入", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "MK 语音输入", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
         // 服务器状态

@@ -1,7 +1,7 @@
 import Foundation
 
 /// 语音模块
-/// 交互：按右 Command 开始录音+转写 → 再按右 Command 停止 → 自动注入
+/// 交互：按住右 Option 开始录音+转写 → 松开停止 → 自动注入（push-to-talk）
 @MainActor
 final class VoiceModule: WEModule {
     let name = "Voice"
@@ -25,19 +25,17 @@ final class VoiceModule: WEModule {
     private var pinnedApp: AppIdentity?
     private var recordingStartT: CFAbsoluteTime = 0
 
+    // push-to-talk: 按下开始录音，松开停止
     func onHotKeyDown() {
-        switch state {
-        case .idle:
+        if state == .idle {
             startRecording()
-        case .recording:
-            stopAndProcess()
-        case .processing:
-            Logger.log("Voice", "Ignored hotkey, processing")
         }
     }
 
     func onHotKeyUp() {
-        // 松开不做操作
+        if state == .recording {
+            stopAndProcess()
+        }
     }
 
     private func startRecording() {

@@ -1,9 +1,9 @@
 #!/bin/bash
-# 创建自签名代码签名证书 "WE Development"
+# 创建自签名代码签名证书 "MK Development"
 # 用于 macOS TCC 权限在重新编译后持久化（ad-hoc 签名每次 hash 变化会丢失权限）
 set -euo pipefail
 
-CERT_NAME="WE Development"
+CERT_NAME="MK Development"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 # 1. 检查证书是否已存在
@@ -31,7 +31,7 @@ x509_extensions = ext
 prompt = no
 
 [req_dn]
-CN = WE Development
+CN = MK Development
 
 [ext]
 keyUsage = digitalSignature

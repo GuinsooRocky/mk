@@ -221,9 +221,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WEDataDir.ensureExists()
 
         // 检查权限
+        // 屏幕录制权限只在 polish.context_ocr_enabled=true 时才主动申请，
+        // 否则不弹框（避免用户没开 OCR 时启动就被打扰）
         let axOK = PermissionManager.checkAccessibility()
-        let screenOK = PermissionManager.checkScreenCapture()
-        Logger.log("WE", "Accessibility: \(axOK), Screen capture: \(screenOK)")
+        let ocrEnabled = (config.polishConfig["context_ocr_enabled"] as? Bool) ?? false
+        let screenOK = ocrEnabled ? PermissionManager.checkScreenCapture() : false
+        Logger.log("WE", "Accessibility: \(axOK), Screen capture: \(screenOK) (ocr=\(ocrEnabled))")
 
         // 初始化菜单栏
         statusBar = StatusBarController(moduleManager: moduleManager)

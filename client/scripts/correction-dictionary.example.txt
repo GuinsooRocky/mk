@@ -126,6 +126,36 @@ Homebrew
 iTerm
 VS Code
 
+# === Git 操作 ===
+commit | comet | come it
+push
+pull
+fetch
+clone
+merge
+rebase | re base | rebays
+checkout | check out
+branch
+stash
+reset
+revert
+amend | a mend
+squash
+cherry-pick | cherry pick
+fork
+tag
+log
+status
+diff
+blame
+HEAD
+origin
+upstream
+remote
+gh
+GitLab
+Bitbucket
+
 # === 项目 / 缩写 ===
 PRD
 MVP

@@ -2,10 +2,17 @@ import Foundation
 
 /// 组装 SpeechAnalyzer.contextualStrings 的统一入口
 /// 来源：纠错字典（可关）+ 屏幕 OCR 关键词（可关）
-/// Apple 建议 contextualStrings 总长 ≤100 项
+///
+/// Apple 文档建议 ≤100 项，但 2026-05-09 实测（ContextCapacityTest）
+/// 显示 SA 内部对 hint 用了 O(1)/O(log n) 索引：
+///   0 词 → 210ms（baseline）
+///   50 词 → 80ms
+///   100/500/1000/5000 词 → 90ms（基本不变）
+/// 100 是"效果建议"而非"性能限制"。当前放宽到 1000 让 codebase 字典全注入；
+/// 准确率影响待后续专门实测。
 @MainActor
 enum ContextEnhancer {
-    private static let maxContextualStrings = 100
+    private static let maxContextualStrings = 1000
 
     /// 组合字典术语和屏幕 OCR 关键词
     /// - 两个开关由 config.polish.context_{dictionary,ocr}_enabled 控制

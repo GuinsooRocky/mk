@@ -20,8 +20,11 @@ server/.env
 *.xcodeproj/
 *.xcworkspace/
 
-# Claude Code
-.claude/
+# Claude Code（CLAUDE.md 项目级约定入 git，其他本地配置/缓存忽略）
+.claude/settings.local.json
+.claude/cache/
+.claude/tmp/
+.claude/skills/
 
 # Internal docs (not for public)
 PLAN.md

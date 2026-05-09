@@ -81,6 +81,13 @@ enum NumberNormalizer {
                 let spanEnd = i  // exclusive
                 let span = String(chars[spanStart..<spanEnd])
 
+                // 单字符 span 不转换 — "一/两" 等 99% 场景是量词（一种/两个/一家/一些），不是数字
+                // 多字 number span（"三十"/"二零二四"/"三千万"）才进 normalizer
+                if span.count < 2 {
+                    out.append(contentsOf: span)
+                    continue
+                }
+
                 // 解析 + format
                 if let formatted = parseAndFormat(span: span) {
                     out.append(contentsOf: formatted)

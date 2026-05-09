@@ -130,8 +130,9 @@ enum FillerRemover {
             let block = nsText.substring(with: NSRange(location: m.range.location, length: blockLength))
             // 跳过纯空白（防把句间空格压没）
             if block.allSatisfy({ $0.isWhitespace }) { continue }
-            // 跳过单字符 ASCII 字母数字：英文里 "aaa" 可能是合法（如 ASCII 字母重复用作占位），保守不动
-            if blockLength == 1, let c = block.first, c.isASCII { continue }
+            // 跳过任何含 ASCII 字符的 block：数字/英文重复有特定含义（如 "30000000" 是有效数字、"AAAA" 可能是 ASCII 占位）
+            // 重复压缩仅作用于中文重复词（"是的是的是的"、"我们我们我们"）
+            if block.contains(where: { $0.isASCII }) { continue }
 
             let r = Range(m.range, in: working)!
             let times = m.range.length / blockLength

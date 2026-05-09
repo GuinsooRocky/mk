@@ -22,8 +22,17 @@ final class VoicePipeline {
             Logger.log("Pipeline", "Corrected: \(rawText) → \(l1Text)")
         }
 
-        // FR5：口语 filler / 重复词清洗（在标点之前，否则标点出现后 \1 backref 不连续）
+        // FR6：中文数字 → 阿拉伯（轻量 ITN）— 在 filler 之前，避免压缩"三三三"等
         let polishConf = RuntimeConfig.shared.polishConfig
+        if (polishConf["fr6_number_enabled"] as? Bool) ?? true {
+            let normalized = NumberNormalizer.apply(l1Text)
+            if normalized != l1Text {
+                Logger.log("Pipeline", "Number: \(l1Text) → \(normalized)")
+                l1Text = normalized
+            }
+        }
+
+        // FR5：口语 filler / 重复词清洗（在标点之前，否则标点出现后 \1 backref 不连续）
         if (polishConf["fr5_filler_enabled"] as? Bool) ?? true {
             let cleaned = FillerRemover.apply(l1Text)
             if cleaned != l1Text {

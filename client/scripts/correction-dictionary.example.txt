@@ -1,0 +1,138 @@
+# MK 纠错字典 — .txt 格式
+#
+# 用法：拷到 ~/.we/correction-dictionary.txt，然后在 ~/.we/config.json 启用：
+#   "polish": {
+#     "context_dictionary_enabled": true,
+#     "context_dictionary_path": "~/.we/correction-dictionary.txt"
+#   }
+#
+# 规则：
+#   - 一行一词
+#   - # 开头是注释
+#   - 空行忽略
+#   - 总数 Apple 建议 ≤ 100
+#
+# 比 JSON 格式更易编辑；如要保留 errors/frequency 元信息用 .json 版本
+
+# === Anthropic 生态 ===
+Claude Code
+Anthropic
+Cursor
+
+# === Apple / macOS ===
+SwiftUI
+SpeechAnalyzer
+Swift
+Xcode
+WWDC
+macOS
+iOS
+
+# === AI / 模型 ===
+Tauri
+Groq
+Ollama
+Whisper
+VoiceInk
+FluidAudio
+QLoRA
+LoRA
+fine-tune
+embedding
+
+# === 前端框架 ===
+React
+Next.js
+Tailwind
+Vue
+Node.js
+TypeScript
+JavaScript
+tRPC
+Prisma
+Bun
+Webpack
+Turbopack
+Vite
+Jotai
+
+# === 前端 UI / 资源（高频，PlusIcon/SVG 类） ===
+PlusIcon
+MinusIcon
+ChevronIcon
+ArrowIcon
+CloseIcon
+SearchIcon
+MenuIcon
+Icon
+SVG
+PNG
+JPG
+JPEG
+GIF
+WebP
+Component
+Hover
+Focus
+Modal
+Tooltip
+Dropdown
+Sidebar
+Navbar
+Avatar
+Badge
+Skeleton
+Spinner
+Toast
+Drawer
+Carousel
+ESLint
+Prettier
+Vitest
+Playwright
+Storybook
+shadcn
+Radix
+Lucide
+Heroicons
+Figma
+Framer
+GSAP
+RTK
+Redux
+Zustand
+SWR
+
+# === 后端 / 工具 ===
+Python
+Rust
+GitHub
+Gitea
+Docker
+Kubernetes
+Redis
+PostgreSQL
+GraphQL
+WebSocket
+OAuth
+JWT
+Homebrew
+iTerm
+VS Code
+
+# === 项目 / 缩写 ===
+PRD
+MVP
+TBD
+TCC
+API
+URL
+JSON
+YAML
+CLI
+TUI
+SDK
+IDE
+MK
+onlychat
+ambient-voice

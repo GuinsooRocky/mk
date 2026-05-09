@@ -228,6 +228,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let screenOK = ocrEnabled ? PermissionManager.checkScreenCapture() : false
         Logger.log("WE", "Accessibility: \(axOK), Screen capture: \(screenOK) (ocr=\(ocrEnabled))")
 
+        // 预加载字典（避免首次按热键 50-100ms 延迟 + 立即可见 multi-path 日志）
+        let polish = config.polishConfig
+        if (polish["context_dictionary_enabled"] as? Bool) ?? false {
+            var paths: [String] = []
+            if let p = polish["context_dictionary_path"] as? String, !p.isEmpty { paths.append(p) }
+            if let extras = polish["context_dictionary_paths"] as? [String] { paths.append(contentsOf: extras) }
+            if !paths.isEmpty {
+                CorrectionDictionary.shared.loadAll(from: paths)
+            }
+        }
+
         // 初始化菜单栏
         statusBar = StatusBarController(moduleManager: moduleManager)
 

@@ -211,12 +211,14 @@ final class RemoteInbox {
             let currentApp = AppIdentity.current()
             let polish = RuntimeConfig.shared.polishConfig
             let dictEnabled = polish["context_dictionary_enabled"] as? Bool ?? false
-            let dictPath = polish["context_dictionary_path"] as? String
+            var dictPaths: [String] = []
+            if let p = polish["context_dictionary_path"] as? String, !p.isEmpty { dictPaths.append(p) }
+            if let extras = polish["context_dictionary_paths"] as? [String] { dictPaths.append(contentsOf: extras) }
             let ocrEnabled = polish["context_ocr_enabled"] as? Bool ?? false
             let contextWords = await ContextEnhancer.enhance(
                 for: currentApp,
                 dictionaryEnabled: dictEnabled,
-                dictionaryPath: dictPath,
+                dictionaryPaths: dictPaths,
                 ocrEnabled: ocrEnabled
             )
             if !contextWords.isEmpty {

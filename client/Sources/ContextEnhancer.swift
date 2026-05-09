@@ -12,17 +12,17 @@ enum ContextEnhancer {
     static func enhance(
         for app: AppIdentity?,
         dictionaryEnabled: Bool,
-        dictionaryPath: String?,
+        dictionaryPaths: [String],
         ocrEnabled: Bool
     ) async -> [String] {
         let t0 = CFAbsoluteTimeGetCurrent()
         var result: [String] = []
         var seen = Set<String>()
 
-        // 字典术语（高频术语，用户明确定义）
+        // 字典术语（高频术语，用户明确定义 + codebase 自动扫）
         var dictCount = 0
-        if dictionaryEnabled, let path = dictionaryPath {
-            CorrectionDictionary.shared.load(from: path)
+        if dictionaryEnabled, !dictionaryPaths.isEmpty {
+            CorrectionDictionary.shared.loadAll(from: dictionaryPaths)
             for term in CorrectionDictionary.shared.terms {
                 if seen.insert(term).inserted {
                     result.append(term)

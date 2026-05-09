@@ -22,46 +22,73 @@ final class CorrectionDictionary {
 
     private init() {}
 
-    /// 加载字典，返回是否成功
+    /// 加载单个字典（向后兼容入口）
     @discardableResult
     func load(from path: String) -> Bool {
-        let expanded = (path as NSString).expandingTildeInPath
-        let url = URL(fileURLWithPath: expanded)
-        guard FileManager.default.fileExists(atPath: expanded),
-              let data = try? Data(contentsOf: url) else {
-            Logger.log("Dict", "Load failed: \(expanded)")
-            reset()
-            return false
+        return loadAll(from: [path])
+    }
+
+    /// 加载多个字典（按顺序合并）
+    /// 后加载的 manual corrections 不覆盖前面的（先来先得）
+    /// terms 去重保留首次出现顺序；C5 在合并完后统一一次派生
+    @discardableResult
+    func loadAll(from paths: [String]) -> Bool {
+        var combinedTerms: [String] = []
+        var combinedCorrections: [String: String] = [:]
+        var seenTerms = Set<String>()
+        var loadedPaths: [String] = []
+        var manualCount = 0
+
+        for path in paths {
+            let expanded = (path as NSString).expandingTildeInPath
+            let url = URL(fileURLWithPath: expanded)
+            guard FileManager.default.fileExists(atPath: expanded),
+                  let data = try? Data(contentsOf: url) else {
+                Logger.log("Dict", "Load skip (missing): \(expanded)")
+                continue
+            }
+
+            let parsed: (terms: [String], corrections: [String: String])?
+            if url.pathExtension.lowercased() == "json" {
+                parsed = parseJSON(data)
+            } else {
+                parsed = parseTxt(data)
+            }
+            guard let p = parsed else {
+                Logger.log("Dict", "Parse failed: \(expanded)")
+                continue
+            }
+
+            for term in p.terms where seenTerms.insert(term).inserted {
+                combinedTerms.append(term)
+            }
+            for (err, correct) in p.corrections where combinedCorrections[err] == nil {
+                combinedCorrections[err] = correct
+                manualCount += 1
+            }
+            loadedPaths.append(expanded)
+            Logger.log("Dict", "Loaded \(p.terms.count) terms + \(p.corrections.count) manual corrections from \(expanded)")
         }
 
-        let parsed: (terms: [String], corrections: [String: String])?
-        if url.pathExtension.lowercased() == "json" {
-            parsed = parseJSON(data)
-        } else {
-            parsed = parseTxt(data)
-        }
-
-        guard let p = parsed else {
-            Logger.log("Dict", "Parse failed: \(expanded)")
+        guard !combinedTerms.isEmpty else {
             reset()
             return false
         }
 
         // C5：自动派生错音变体（不覆盖手动 `|` 显式登记的）
-        var corrections = p.corrections
         var synthesized = 0
-        for term in p.terms {
-            for variant in Self.synthesizeVariants(for: term) where corrections[variant] == nil {
-                corrections[variant] = term
+        for term in combinedTerms {
+            for variant in Self.synthesizeVariants(for: term) where combinedCorrections[variant] == nil {
+                combinedCorrections[variant] = term
                 synthesized += 1
             }
         }
 
-        terms = p.terms
-        self.corrections = corrections
-        sortedErrorKeys = corrections.keys.sorted { $0.count > $1.count }
-        loadedPath = expanded
-        Logger.log("Dict", "Loaded \(p.terms.count) terms + \(p.corrections.count) corrections (manual=\(p.corrections.count - synthesized), synth=\(synthesized)) from \(expanded)")
+        terms = combinedTerms
+        corrections = combinedCorrections
+        sortedErrorKeys = combinedCorrections.keys.sorted { $0.count > $1.count }
+        loadedPath = loadedPaths.joined(separator: ", ")
+        Logger.log("Dict", "Total: \(combinedTerms.count) terms + \(combinedCorrections.count) corrections (manual=\(manualCount), synth=\(synthesized)) from \(loadedPaths.count) files")
         return true
     }
 

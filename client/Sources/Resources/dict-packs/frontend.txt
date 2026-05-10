@@ -1,0 +1,300 @@
+# MK 领域包：前端 / Frontend
+# 250+ 高频术语，覆盖框架/构建工具/语言特性/状态管理/UI 库
+# 自动复制到 ~/.we/dictionary-domains/frontend.txt
+
+# === 框架 ===
+React
+Vue
+Angular
+Svelte
+Solid
+Preact
+Lit
+Qwik
+Ember
+Backbone
+jQuery
+
+# === 元框架 / SSR ===
+Next.js
+Nuxt
+Remix
+Astro
+Gatsby
+SvelteKit
+SolidStart
+Qwik City
+Hugo
+Jekyll
+Eleventy
+
+# === 语言 ===
+TypeScript
+JavaScript
+ECMAScript
+ES6
+ES2020
+ES2022
+ES2024
+JSX
+TSX
+WebAssembly
+Wasm
+
+# === 构建工具 ===
+Webpack
+Vite
+Turbopack
+Rollup
+Parcel
+esbuild
+Bun
+Deno
+Snowpack
+Browserify
+Babel
+SWC
+Lightning CSS
+
+# === 包管理 ===
+npm
+yarn
+pnpm
+npx
+yalc
+
+# === CSS / 样式 ===
+Tailwind
+Tailwind CSS
+SCSS
+Sass
+Less
+PostCSS
+Stylus
+CSS Modules
+CSS-in-JS
+styled-components
+Emotion
+Vanilla Extract
+UnoCSS
+Stitches
+Linaria
+
+# === 状态管理 ===
+Redux
+Zustand
+Jotai
+Recoil
+MobX
+Pinia
+Vuex
+XState
+Effector
+Valtio
+
+# === Server / Node 生态 ===
+Node.js
+Express
+Koa
+Fastify
+NestJS
+Hono
+Bun
+Hapi
+
+# === Mobile / Cross ===
+React Native
+Expo
+Flutter
+Ionic
+Capacitor
+Cordova
+Tauri
+Electron
+
+# === 工具链 / 质量 ===
+ESLint
+Prettier
+Stylelint
+Husky
+lint-staged
+commitlint
+Biome
+Rome
+
+# === 测试 ===
+Jest
+Vitest
+Playwright
+Cypress
+Mocha
+Chai
+Jasmine
+Karma
+Puppeteer
+Testing Library
+Storybook
+Chromatic
+MSW
+
+# === 浏览器 / Web API ===
+DOM
+Virtual DOM
+Shadow DOM
+Custom Elements
+Web Components
+Service Worker
+Web Worker
+SharedWorker
+PWA
+WebGL
+WebGPU
+WebRTC
+WebTransport
+Canvas
+SVG
+Web Animations API
+Intersection Observer
+Resize Observer
+Mutation Observer
+
+# === 通信 ===
+HTTP
+HTTPS
+WebSocket
+Server-Sent Events
+SSE
+Long Polling
+gRPC-Web
+GraphQL
+REST
+SWR
+TanStack Query
+React Query
+Apollo
+URQL
+Relay
+
+# === 数据存储 ===
+localStorage
+sessionStorage
+IndexedDB
+Cookie
+WebSQL
+Cache API
+
+# === Module 系统 ===
+ESM
+CommonJS
+CJS
+UMD
+AMD
+IIFE
+
+# === React 生态 ===
+React Hooks
+useState
+useEffect
+useMemo
+useCallback
+useRef
+useContext
+useReducer
+useTransition
+useDeferredValue
+useId
+useSyncExternalStore
+React Server Components
+RSC
+Suspense
+Concurrent Mode
+
+# === Vue 生态 ===
+Composition API
+Options API
+ref
+reactive
+computed
+watch
+watchEffect
+defineComponent
+Teleport
+KeepAlive
+
+# === UI 库 ===
+Material UI
+MUI
+Chakra UI
+Ant Design
+Element Plus
+Element UI
+Naive UI
+shadcn
+Headless UI
+Radix UI
+Mantine
+NextUI
+HeroUI
+PrimeVue
+Quasar
+Vuetify
+Bootstrap
+
+# === 渲染范式 ===
+SSR
+CSR
+SSG
+ISR
+PPR
+Streaming SSR
+Hydration
+Partial Hydration
+Islands Architecture
+
+# === 设计模式 ===
+HOC
+Render Props
+Mixin
+Composable
+Hook
+Slot
+Compound Component
+
+# === 性能 / 优化 ===
+Code Splitting
+Tree Shaking
+Lazy Loading
+Prefetch
+Preload
+Bundle Analyzer
+Lighthouse
+Core Web Vitals
+LCP
+FID
+CLS
+INP
+TTFB
+FCP
+TTI
+
+# === 异步 / 并发 ===
+Promise
+async
+await
+generator
+yield
+microtask
+macrotask
+event loop
+
+# === 错音映射（高频）===
+React | react | ree act
+Vue | view | view J S
+Angular | angle ler
+TypeScript | type script | TypeSkript
+Webpack | web pack | web pak
+Tailwind | tail wind | tailwide
+GraphQL | graph que el | graph cul
+Hooks | hux | hook si
+JSX | jay s ex | je es ex
+DOM | dom | D O M

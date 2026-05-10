@@ -8,6 +8,10 @@ let package = Package(
         .executableTarget(
             name: "MK",
             path: "Sources",
+            exclude: ["Info.plist"],
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ]

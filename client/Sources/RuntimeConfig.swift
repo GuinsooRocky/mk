@@ -72,11 +72,21 @@ final class RuntimeConfig {
                     "health_interval": 30
                 ],
                 "polish": [
-                    "enabled": true,
-                    "system_prompt": "你是语音识别纠错助手。格式要求：修正语音识别错误，只输出修正后的最终文本，不要回答问题，不要改变原意，去掉语气词，修正标点符号。",
-                    "context_dictionary_enabled": false,
-                    "context_dictionary_path": "~/.we/correction-dictionary.json",
+                    "enabled": false,
+                    "context_dictionary_enabled": true,
+                    "context_dictionary_path": "~/.we/correction-dictionary.txt",
                     "context_ocr_enabled": false,
+                    "dict_max_terms": 1500,
+                    "dict_max_correction_terms": 500,
+                    "dictionary_domains": [
+                        "ai":               "~/.we/dictionary-domains/ai.txt",
+                        "frontend":         "~/.we/dictionary-domains/frontend.txt",
+                        "backend":          "~/.we/dictionary-domains/backend.txt",
+                        "product":          "~/.we/dictionary-domains/product.txt",
+                        "design":           "~/.we/dictionary-domains/design.txt",
+                        "internet-general": "~/.we/dictionary-domains/internet-general.txt"
+                    ],
+                    "active_domains": ["ai", "frontend", "backend", "product", "design", "internet-general"],
                     "codebase_scan": [
                         "enabled": false,
                         "roots": ["~/Desktop"],

@@ -1,0 +1,287 @@
+# MK 领域包：AI / LLM 圈高频术语
+# 200+ 词，从 SA 易音译错的优先收录
+# 用法：在 config 的 polish.context_dictionary_paths 里加这个文件
+
+# === LLM 厂商 ===
+OpenAI
+Anthropic
+DeepMind
+Google
+Meta
+Microsoft
+Mistral
+Cohere
+xAI
+DeepSeek | depsick | depsice | depsec | desic | Desic | DPSync
+Moonshot
+Zhipu
+Baichuan
+Qwen
+MiniMax
+ByteDance
+Alibaba
+Tencent
+NVIDIA | invidia | nvideo
+AMD
+Intel
+TSMC
+Apple
+
+# === 模型名 ===
+GPT-4
+GPT-4o
+GPT-5
+ChatGPT
+Claude | clod | crowd
+Claude Sonnet
+Claude Opus
+Claude Haiku
+Gemini | Gemne | Jemini
+Gemini Pro
+Gemma
+Llama
+Llama 3
+Mixtral
+Phi
+Phi-3
+Qwen2.5
+DeepSeek-V3
+DeepSeek-R1
+DeepSeek-V4 | DV4 | DV three
+o1
+o3
+Sora
+Stable Diffusion
+Midjourney
+DALL-E
+Flux
+Whisper
+Codex
+Copilot
+Cursor
+Devin
+Replit
+Lovable
+v0
+Bolt
+Windsurf
+Continue
+Aider
+Granola
+Otter
+
+# === 架构 / 算法 ===
+transformer | trans former
+attention
+self-attention
+sparse attention | spasitention
+multi-head attention
+MoE | Mixture of Experts
+encoder
+decoder
+embedding
+tokenizer
+diffusion
+RAG
+fine-tuning | fine tuning
+LoRA
+QLoRA
+quantization
+distillation
+RLHF
+DPO
+SFT
+PPO
+chain-of-thought
+CoT
+few-shot
+zero-shot
+in-context learning
+ICL
+prompt
+prompt engineering
+system prompt
+KV cache | KVCash | KV cash
+context window
+hidden state
+
+# === 训练 / 推理 ===
+pre-training | pre training
+post-training
+inference | infrence
+training
+batch
+gradient
+backprop
+checkpoint
+parameter
+weight
+bias
+hyperparameter
+overfit
+regularization
+dropout
+optimizer
+Adam
+AdamW
+learning rate
+warmup
+scheduler
+
+# === 硬件 / 算力 ===
+GPU
+TPU
+CUDA
+kernel
+FLOPs
+FLOP
+TFLOPS
+HBM
+VRAM
+bandwidth | banwise | band wise
+compute
+inference latency
+throughput
+parallelism
+data parallel
+tensor parallel
+pipeline parallel
+infrastructure | nferstuctr | infistructr
+
+# === 业界 / 安全 ===
+AGI
+ASI
+hallucination
+alignment
+safety
+jailbreak
+red teaming
+scaling law
+emergent
+benchmark
+MMLU
+HumanEval
+GSM8K
+SWE-bench
+ARC
+AGIEval
+
+# === Agent / 工具 ===
+agent
+multi-agent
+tool use
+function calling
+MCP
+multimodal
+vision
+voice
+speech
+ASR
+TTS
+OCR
+vector database
+vector search
+similarity search
+retrieval
+RAG pipeline
+
+# === 工具 / 框架 ===
+LangChain
+LlamaIndex
+Hugging Face
+Ollama
+vLLM
+TensorRT
+llama.cpp
+Whisper.cpp
+MLX
+CoreML
+ONNX
+PyTorch
+TensorFlow
+JAX
+Triton
+DeepSpeed
+Accelerate
+PEFT
+Transformers
+
+# === 中文常用 ===
+大模型
+小模型
+基座模型
+模型架构
+模型权重
+预训练
+微调
+蒸馏
+量化
+对齐
+幻觉
+涌现
+推理
+训练
+上下文
+上下文窗口
+提示词
+系统提示词
+工具调用
+智能体
+多模态
+扩展定律
+能效比
+显存
+算力
+通用人工智能
+强化学习
+监督学习
+人类反馈强化学习
+
+# === Token / Efficiency ===
+token
+tokens
+Token Efficiency | tokenifficience
+tokens per second
+TPS
+TTFT
+time to first token
+context length
+compression ratio
+
+# === 中英混常用搭配 ===
+fine-tune
+prompt 工程
+prompt 模版
+agent 框架
+embedding 向量
+向量数据库
+模型 inference
+inference 加速
+GPU 算力
+显存占用
+推理延迟
+
+# === 公司 / 产品（追加） ===
+Hugging Face Hub
+Replicate
+Together AI
+Fireworks
+Groq
+Modal
+Anyscale
+Lightning AI
+Weights & Biases
+W&B
+MLflow
+Comet
+Neptune
+
+# === Apple ML ===
+SpeechAnalyzer
+Speech Framework
+Core ML
+Create ML
+Vision Framework
+Natural Language
+NSSpellChecker
+SFSpeechRecognizer

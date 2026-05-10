@@ -1,0 +1,386 @@
+# MK 领域包：互联网通用 / Internet General
+# 200+ 高频术语，覆盖网络协议/Web 基础/Git/Shell/IDE/AI 通用
+# 自动复制到 ~/.we/dictionary-domains/internet-general.txt
+
+# === 通用缩写 ===
+API
+SDK
+CLI
+GUI
+IDE
+REPL
+AST
+DSL
+ORM
+CRUD
+MVC
+MVVM
+MVP
+DRY
+KISS
+YAGNI
+SOLID
+
+# === 商业模式 ===
+SaaS
+PaaS
+IaaS
+FaaS
+BaaS
+DBaaS
+B2B
+B2C
+C2C
+B2B2C
+B2G
+D2C
+
+# === 融资 / 公司 ===
+IPO
+M&A
+VC
+PE
+seed
+pre-seed
+Series A
+Series B
+Series C
+Series D
+unicorn
+decacorn
+hectocorn
+SPAC
+secondary
+
+# === 网络协议 ===
+HTTP
+HTTPS
+HTTP/2
+HTTP/3
+QUIC
+FTP
+SFTP
+SSH
+SMTP
+POP3
+IMAP
+DNS
+DHCP
+ICMP
+TCP
+UDP
+IP
+IPv4
+IPv6
+TLS
+SSL
+mTLS
+
+# === URL ===
+URL
+URI
+URN
+slug
+query string
+fragment
+path
+host
+port
+scheme
+
+# === HTTP 方法 ===
+GET
+POST
+PUT
+DELETE
+PATCH
+OPTIONS
+HEAD
+TRACE
+CONNECT
+
+# === HTTP 状态码 ===
+200 OK
+201 Created
+204 No Content
+301 Moved Permanently
+302 Found
+304 Not Modified
+400 Bad Request
+401 Unauthorized
+403 Forbidden
+404 Not Found
+409 Conflict
+410 Gone
+422 Unprocessable
+429 Too Many Requests
+500 Internal Server Error
+502 Bad Gateway
+503 Service Unavailable
+504 Gateway Timeout
+
+# === 数据格式 ===
+JSON
+XML
+YAML
+TOML
+CSV
+TSV
+Markdown
+MDX
+ProtoBuf
+MessagePack
+BSON
+Avro
+Thrift
+
+# === 字符编码 ===
+ASCII
+UTF-8
+UTF-16
+UTF-32
+Unicode
+Latin-1
+ISO-8859-1
+GBK
+GB18030
+Big5
+
+# === 正则 ===
+regex
+regular expression
+capture group
+backreference
+lookahead
+lookbehind
+greedy
+lazy
+PCRE
+
+# === Cron ===
+cron
+crontab
+systemd
+launchd
+schedule
+
+# === Shell ===
+bash
+zsh
+fish
+PowerShell
+sh
+nushell
+dash
+ksh
+
+# === 编辑器 ===
+vi
+vim
+emacs
+nano
+neovim
+helix
+zed
+sublime
+VS Code
+Cursor
+JetBrains
+IntelliJ
+WebStorm
+PyCharm
+GoLand
+RustRover
+DataGrip
+Xcode
+Android Studio
+
+# === Git 平台 ===
+git
+github
+gitlab
+bitbucket
+gitee
+codeberg
+sourcehut
+
+# === Git 操作 ===
+pull request
+PR
+MR
+merge request
+code review
+branch
+commit
+merge
+rebase
+cherry-pick
+stash
+reset
+revert
+tag
+HEAD
+origin
+upstream
+fork
+clone
+fetch
+push
+pull
+diff
+log
+status
+blame
+bisect
+worktree
+submodule
+conflict
+resolve
+three-way merge
+fast-forward
+squash
+
+# === 网络基础 ===
+VPN
+proxy
+forward proxy
+reverse proxy
+firewall
+NAT
+port forwarding
+DNS resolution
+CDN
+edge
+ISP
+
+# === 性能 ===
+latency
+throughput
+bandwidth
+QPS
+TPS
+RPS
+p50
+p95
+p99
+SLA
+uptime
+downtime
+
+# === AI 通用 ===
+AI Agent
+AI agent
+LLM
+GPT
+GPT-4
+GPT-5
+Claude
+Sonnet
+Opus
+Haiku
+Gemini
+Llama
+Mistral
+Mixtral
+Qwen
+DeepSeek
+Yi
+
+# === Prompt 工程 ===
+prompt
+prompt engineering
+prompt template
+system prompt
+user prompt
+few-shot
+zero-shot
+chain-of-thought
+CoT
+ReAct
+tree of thoughts
+self-consistency
+prompt injection
+
+# === RAG / Embedding ===
+embedding
+vector
+cosine similarity
+RAG
+retrieval
+semantic search
+vector database
+Pinecone
+Weaviate
+Qdrant
+Chroma
+Milvus
+
+# === Tool Use ===
+function calling
+tool use
+agent
+multi-agent
+MCP
+Model Context Protocol
+JSON mode
+structured output
+
+# === Fine-tuning ===
+fine-tuning
+LoRA
+QLoRA
+PEFT
+RLHF
+DPO
+ORPO
+distillation
+quantization
+pruning
+
+# === 输入法 / 键盘 ===
+shortcut
+hotkey
+keystroke
+modifier
+chord
+palette
+command palette
+fuzzy finder
+file picker
+
+# === 错音映射 ===
+API | A P I | a pi | api 一
+SDK | S D K | sdk 一
+CLI | C L I | si li
+GUI | G U I | gu i
+IDE | I D E | i de
+JSON | jay son | je sin
+YAML | yam el | y am
+SaaS | sass | sa as
+B2B | b 2 b | bi tu bi
+B2C | b 2 c | bi tu si
+C2C | c 2 c | si tu si
+HTTP | h t t p | h 踢踢 p
+HTTPS | h t t p s
+TLS | t l s
+DNS | d n s | de en es
+CDN | c d n
+VPN | v p n | vi pi en
+SSH | s s h | s s 哈
+FTP | f t p
+URL | u r l | you 啊 l
+URI | u r i
+JWT | jot | jay double u t
+OAuth | oh auth | o off
+OIDC | o i d c
+GraphQL | graph que el | graph cul
+REST | rest | rest ful
+RAG | rag | r a g
+LLM | l l m | el el em
+GPT | g p t | jee pee tee
+Claude | crowd | cloud
+LoRA | lora | lo ra
+QLoRA | q lora
+DPO | d p o
+RLHF | r l h f
+MCP | m c p | em si pi

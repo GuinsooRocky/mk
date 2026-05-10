@@ -227,6 +227,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Logger.log("WE", "App launched, modules: \(moduleManager.moduleNames)")
+
+        // 预制领域包：启动完成后异步装（不阻塞 UI）
+        // 缺哪个补哪个，不覆盖用户已修改的版本
+        DispatchQueue.global(qos: .background).async {
+            DictPackInstaller.installIfMissing()
+            // 如果有装新的，触发字典 reload 让它生效
+            DispatchQueue.main.async {
+                let polish2 = RuntimeConfig.shared.polishConfig
+                if (polish2["context_dictionary_enabled"] as? Bool) ?? false {
+                    let paths = CorrectionDictionary.resolveEnabledPaths(polish: polish2)
+                    if !paths.isEmpty {
+                        CorrectionDictionary.shared.loadAll(from: paths)
+                    }
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

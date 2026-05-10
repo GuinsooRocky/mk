@@ -1,0 +1,271 @@
+# MK 领域包：产品 / Product
+# 150+ 高频术语，覆盖文档/指标/方法论/敏捷/增长
+# 自动复制到 ~/.we/dictionary-domains/product.txt
+
+# === 文档类型 ===
+PRD
+BRD
+MRD
+FRD
+RFC
+ADR
+spec
+specification
+roadmap
+
+# === 目标 / 指标 ===
+OKR
+KPI
+KR
+North Star Metric
+NSM
+HEART
+PIRATE
+AARRR
+
+# === 用户研究 ===
+NPS
+CSAT
+CES
+PMF
+Product-Market Fit
+JTBD
+Jobs to be Done
+persona
+user persona
+user journey
+journey map
+empathy map
+touchpoint
+pain point
+moment of truth
+focus group
+in-depth interview
+guerrilla research
+
+# === 用户行为指标 ===
+DAU
+MAU
+WAU
+DAU/MAU
+stickiness
+retention
+churn
+churn rate
+cohort
+cohort analysis
+funnel
+conversion
+conversion rate
+drop-off
+engagement
+session length
+
+# === 商业指标 ===
+GMV
+ARPU
+ARPPU
+LTV
+CLV
+CAC
+LTV/CAC
+payback period
+gross margin
+ARR
+MRR
+TPV
+TPM
+take rate
+
+# === 实验 / 数据 ===
+A/B test
+A/B testing
+multivariate test
+split test
+holdout
+control group
+treatment group
+hypothesis
+statistical significance
+p-value
+confidence interval
+sample size
+power analysis
+attribution
+last-touch attribution
+multi-touch attribution
+
+# === 市场 ===
+TAM
+SAM
+SOM
+market sizing
+GTM
+go-to-market
+product positioning
+value proposition
+USP
+unique selling proposition
+competitive analysis
+SWOT
+Porter's five forces
+moat
+defensibility
+
+# === 商业模式 ===
+SaaS
+PaaS
+IaaS
+freemium
+subscription
+usage-based
+tiered pricing
+flat rate
+per-seat
+metered billing
+trial
+pilot
+beta
+GA
+General Availability
+
+# === 用户生命周期 ===
+acquisition
+activation
+engagement
+retention
+referral
+revenue
+onboarding
+aha moment
+habit moment
+power user
+churn
+resurrection
+
+# === 增长 ===
+growth hacking
+viral coefficient
+K factor
+viral loop
+growth loop
+network effect
+flywheel
+compound growth
+land and expand
+expansion revenue
+upsell
+cross-sell
+PLG
+product-led growth
+sales-led growth
+
+# === 敏捷 / 流程 ===
+agile
+scrum
+kanban
+sprint
+sprint planning
+standup
+daily
+retrospective
+retro
+demo
+review
+backlog
+product backlog
+sprint backlog
+story point
+velocity
+burndown
+burnup
+epic
+user story
+acceptance criteria
+
+# === 角色 ===
+PM
+PdM
+TPM
+EM
+Engineering Manager
+Designer
+PD
+UX Designer
+UI Designer
+researcher
+analyst
+data scientist
+stakeholder
+
+# === 设计阶段 ===
+discovery
+delivery
+dual-track agile
+double diamond
+design thinking
+ideation
+prototype
+MVP
+minimum viable product
+
+# === 沟通 / 协作 ===
+alignment
+buy-in
+decision matrix
+RACI
+DACI
+RICE
+ICE
+MoSCoW
+pain-gain map
+critique
+deep dive
+1-on-1
+
+# === 战略 ===
+Lean Startup
+Build-Measure-Learn
+pivot
+strategic bet
+North Star
+mission statement
+vision statement
+quarterly planning
+OKR planning
+roadmap review
+post-mortem
+
+# === 经济 / 增长 ===
+hockey stick
+J curve
+S curve
+crossing the chasm
+early adopter
+late majority
+laggard
+diffusion of innovation
+
+# === 错音映射 ===
+PRD | P R D | P 啊 D
+OKR | O K R | O K er
+KPI | K P I | K 派 I
+NPS | N P S | N pi es
+DAU | D A U | dao
+MAU | M A U
+GMV | G M V | gem b
+CAC | cake | C A C
+LTV | L T V
+ARPU | a pu | a 普
+A/B test | A B 测试 | a b 太 si
+PMF | P M F
+JTBD | J T B D
+SaaS | sass | sa s
+TAM | tam | tan
+SAM | sam
+SOM | som
+GTM | G T M
+USP | U S P
+RICE | rice | 瑞斯
+ICE | ice | 爱si
+MoSCoW | moscow | 莫斯科

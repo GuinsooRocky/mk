@@ -1,0 +1,301 @@
+# MK 领域包：设计 / Design
+# 150+ 高频术语，覆盖工具/排版/色彩/系统/可访问性
+# 自动复制到 ~/.we/dictionary-domains/design.txt
+
+# === 工具 ===
+Figma
+Sketch
+Adobe XD
+Framer
+InVision
+Principle
+Origami
+ProtoPie
+Marvel
+Zeplin
+Abstract
+Folio
+
+# === Adobe ===
+Photoshop
+Illustrator
+InDesign
+After Effects
+Premiere Pro
+Lightroom
+Bridge
+XD
+
+# === 设计阶段 ===
+wireframe
+mockup
+prototype
+hi-fi
+hi-fidelity
+lo-fi
+lo-fidelity
+high fidelity
+low fidelity
+clickable prototype
+interactive prototype
+sketch
+
+# === 排版 ===
+typography
+typeface
+font family
+font weight
+font style
+kerning
+leading
+tracking
+baseline
+x-height
+ascender
+descender
+serif
+sans-serif
+monospace
+display
+script
+italic
+bold
+regular
+medium
+light
+ultralight
+black
+extrabold
+
+# === 色彩 ===
+color theory
+color palette
+monochromatic
+complementary
+analogous
+triadic
+tetradic
+split complementary
+HSL
+HSB
+HSV
+RGB
+CMYK
+hex
+RGBA
+HSLA
+contrast
+saturation
+brightness
+hue
+opacity
+alpha
+luminance
+chromaticity
+
+# === 单位 / 度量 ===
+pixel
+px
+point
+pt
+em
+rem
+dp
+sp
+viewport
+vw
+vh
+percent
+
+# === 响应式 ===
+responsive design
+adaptive design
+breakpoint
+mobile first
+desktop first
+fluid layout
+grid system
+12-column grid
+
+# === 设计系统 ===
+design system
+component library
+design token
+atomic design
+atom
+molecule
+organism
+template
+page
+Material Design
+Apple HIG
+Human Interface Guidelines
+Fluent Design
+Carbon
+Polaris
+Lightning Design System
+Garden
+
+# === 可访问性 ===
+accessibility
+a11y
+WCAG
+ARIA
+screen reader
+contrast ratio
+color blind
+focus indicator
+skip link
+alt text
+landmark
+semantic HTML
+
+# === 可用性 ===
+usability
+usability testing
+heuristic evaluation
+Nielsen heuristic
+cognitive load
+Fitts's law
+Hick's law
+Miller's law
+Jakob's law
+peak-end rule
+serial position effect
+
+# === 风格 ===
+skeuomorphism
+flat design
+material design
+neumorphism
+glassmorphism
+brutalism
+minimalism
+maximalism
+Y2K aesthetic
+retro
+vaporwave
+
+# === 资产 ===
+iconography
+icon set
+illustration
+photography
+stock photo
+3D render
+glyph
+emoji
+favicon
+logo mark
+wordmark
+lockup
+
+# === 图形格式 ===
+SVG
+PNG
+JPG
+JPEG
+WebP
+AVIF
+GIF
+APNG
+MP4
+WebM
+MOV
+HEIC
+
+# === 矢量 / 栅格 ===
+bezier
+vector
+raster
+path
+anchor point
+handle
+stroke
+fill
+gradient
+linear gradient
+radial gradient
+conic gradient
+mesh gradient
+
+# === 状态 ===
+hover state
+focus state
+active state
+disabled state
+pressed state
+loading state
+error state
+empty state
+success state
+default state
+
+# === UI 组件 ===
+button
+primary button
+secondary button
+ghost button
+text button
+input
+text field
+text area
+dropdown
+select
+combobox
+modal
+dialog
+popover
+tooltip
+drawer
+sheet
+snackbar
+toast
+alert
+badge
+chip
+pill
+avatar
+card
+list item
+table
+data grid
+accordion
+tabs
+breadcrumb
+pagination
+stepper
+slider
+toggle
+switch
+checkbox
+radio button
+date picker
+time picker
+color picker
+
+# === 协作 ===
+design review
+critique
+iteration
+handoff
+spec
+redline
+asset export
+component library
+shared library
+team library
+
+# === 错音映射 ===
+Figma | fig ma
+Sketch | si kai chi | s ke ch
+Photoshop | photo shop
+Illustrator | ill str | ill stat
+SVG | s v g | sag
+PNG | p n g | peng
+WebP | web p | web pi
+WCAG | w cag
+ARIA | aria | a ri ya
+HSL | h s l
+RGB | r g b
+CMYK | c m y k

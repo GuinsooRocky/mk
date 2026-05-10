@@ -1,0 +1,349 @@
+# MK 领域包：后端 / Backend
+# 250+ 高频术语，覆盖云/容器/数据库/消息/中间件/语言
+# 自动复制到 ~/.we/dictionary-domains/backend.txt
+
+# === 容器 / 编排 ===
+Kubernetes
+K8s
+Docker
+Podman
+Helm
+Kustomize
+Skaffold
+Tilt
+Argo CD
+Flux
+containerd
+runc
+buildah
+
+# === Service Mesh ===
+Istio
+Linkerd
+Envoy
+Consul
+Traefik Mesh
+
+# === 云厂商 ===
+AWS
+GCP
+Azure
+Aliyun
+Tencent Cloud
+DigitalOcean
+Linode
+Vultr
+Vercel
+Netlify
+Cloudflare
+Fastly
+
+# === AWS 服务 ===
+EC2
+S3
+RDS
+Aurora
+DynamoDB
+EBS
+EFS
+VPC
+IAM
+KMS
+SQS
+SNS
+SES
+Lambda
+Fargate
+ECS
+EKS
+CloudFront
+Route 53
+API Gateway
+Step Functions
+EventBridge
+Kinesis
+Athena
+Glue
+Redshift
+SageMaker
+Bedrock
+
+# === 反向代理 / 负载均衡 ===
+nginx
+Apache
+Caddy
+HAProxy
+Traefik
+ELB
+ALB
+NLB
+Cloud Load Balancer
+
+# === 数据库 ===
+PostgreSQL
+Postgres
+MySQL
+MariaDB
+SQLite
+MongoDB
+Redis
+Memcached
+Cassandra
+ScyllaDB
+DynamoDB
+CockroachDB
+TiDB
+Clickhouse
+DuckDB
+Elasticsearch
+OpenSearch
+Solr
+Neo4j
+ArangoDB
+InfluxDB
+TimescaleDB
+
+# === 消息队列 ===
+Kafka
+RabbitMQ
+NATS
+Pulsar
+Redpanda
+ActiveMQ
+ZeroMQ
+SQS
+Pub/Sub
+EventHub
+Kinesis
+
+# === API 协议 ===
+gRPC
+GraphQL
+REST
+RESTful
+JSON-RPC
+SOAP
+OData
+Webhook
+WebSocket
+Server-Sent Events
+SSE
+
+# === 认证 / 安全 ===
+OAuth
+OAuth2
+OIDC
+SAML
+JWT
+mTLS
+TLS
+SSL
+CORS
+CSRF
+XSS
+SQL injection
+RBAC
+ABAC
+ACL
+Zero Trust
+
+# === 可观测性 ===
+Prometheus
+Grafana
+Jaeger
+OpenTelemetry
+Zipkin
+Tempo
+Loki
+Mimir
+Datadog
+New Relic
+Honeycomb
+Lightstep
+ELK
+EFK
+Splunk
+
+# === IaC ===
+Terraform
+Pulumi
+Ansible
+Chef
+Puppet
+SaltStack
+CloudFormation
+CDK
+Bicep
+
+# === CI / CD ===
+GitHub Actions
+GitLab CI
+Jenkins
+CircleCI
+Travis CI
+Buildkite
+Drone
+Tekton
+Spinnaker
+Argo Workflows
+
+# === 语言 ===
+Go
+Golang
+Rust
+Python
+Java
+Kotlin
+Scala
+Elixir
+Erlang
+Haskell
+Clojure
+OCaml
+F#
+Ruby
+PHP
+C++
+C#
+Dart
+Crystal
+Nim
+
+# === 后端框架 ===
+Spring Boot
+Spring
+Django
+Flask
+FastAPI
+Rails
+Ruby on Rails
+Laravel
+Symfony
+Echo
+Gin
+Fiber
+Chi
+Actix
+Rocket
+Axum
+Tokio
+Phoenix
+LiveView
+
+# === 数据库概念 ===
+ORM
+SQL
+NoSQL
+NewSQL
+ACID
+BASE
+CAP theorem
+PACELC
+transaction
+deadlock
+isolation level
+repeatable read
+read committed
+serializable
+replication
+sharding
+partitioning
+denormalization
+schema migration
+prepared statement
+stored procedure
+trigger
+view
+index
+B-tree
+hash index
+
+# === 缓存 ===
+cache
+cache invalidation
+LRU
+LFU
+LRU cache
+TTL
+write-through
+write-back
+write-around
+read-through
+cache stampede
+
+# === 分布式 ===
+distributed system
+consensus
+Paxos
+Raft
+leader election
+quorum
+gossip protocol
+vector clock
+CRDT
+saga
+event sourcing
+CQRS
+event-driven
+
+# === 流量控制 ===
+load balancing
+rate limiting
+circuit breaker
+bulkhead
+retry
+exponential backoff
+jitter
+graceful degradation
+canary deployment
+blue-green deployment
+rolling update
+
+# === 微服务 ===
+microservice
+monolith
+serverless
+service mesh
+sidecar
+api gateway
+BFF
+service discovery
+config server
+
+# === DevOps ===
+GitOps
+DevOps
+SRE
+SLI
+SLO
+SLA
+error budget
+chaos engineering
+postmortem
+runbook
+
+# === 构建 / 包管理 ===
+Maven
+Gradle
+sbt
+Cargo
+go mod
+pip
+poetry
+pipenv
+uv
+composer
+Bundler
+
+# === 错音映射 ===
+Kubernetes | k8s | k 八 s
+Docker | doc er
+nginx | engine x | n gin x
+Redis | red dis | red is
+Kafka | kaf ka
+gRPC | g r p c
+GraphQL | graph cul
+PostgreSQL | postgress q l
+Elasticsearch | elastic search
+Lambda | land da
+Terraform | terra form

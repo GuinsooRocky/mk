@@ -288,12 +288,12 @@ macrotask
 event loop
 
 # === 错音映射（高频）===
-React | react | ree act
+React | ree act
 Vue | view | view J S
 Angular | angle ler
-TypeScript | type script | TypeSkript
+TypeScript | type script
 Webpack | web pack | web pak
-Tailwind | tail wind | tailwide
+Tailwind | tail wind
 GraphQL | graph que el | graph cul
 Hooks | hux | hook si
 JSX | jay s ex | je es ex

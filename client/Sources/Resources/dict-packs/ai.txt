@@ -12,7 +12,7 @@ Microsoft
 Mistral
 Cohere
 xAI
-DeepSeek | depsick | depsice | depsec | desic | Desic | DPSync
+DeepSeek
 Moonshot
 Zhipu
 Baichuan
@@ -21,7 +21,7 @@ MiniMax
 ByteDance
 Alibaba
 Tencent
-NVIDIA | invidia | nvideo
+NVIDIA
 AMD
 Intel
 TSMC
@@ -32,11 +32,11 @@ GPT-4
 GPT-4o
 GPT-5
 ChatGPT
-Claude | clod | crowd
+Claude
 Claude Sonnet
 Claude Opus
 Claude Haiku
-Gemini | Gemne | Jemini
+Gemini
 Gemini Pro
 Gemma
 Llama
@@ -101,14 +101,14 @@ ICL
 prompt
 prompt engineering
 system prompt
-KV cache | KVCash | KV cash
+KV cache | KVCash
 context window
 hidden state
 
 # === 训练 / 推理 ===
 pre-training | pre training
 post-training
-inference | infrence
+inference
 training
 batch
 gradient
@@ -138,7 +138,7 @@ FLOP
 TFLOPS
 HBM
 VRAM
-bandwidth | banwise | band wise
+bandwidth | band wise
 compute
 inference latency
 throughput
@@ -146,7 +146,7 @@ parallelism
 data parallel
 tensor parallel
 pipeline parallel
-infrastructure | nferstuctr | infistructr
+infrastructure
 
 # === 业界 / 安全 ===
 AGI

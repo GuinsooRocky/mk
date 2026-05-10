@@ -10,6 +10,7 @@ import Foundation
 /// 模型 + 上下文理解。我们用简化版规则匹配 + 边界条件，覆盖 80% 高频场景。
 enum PunctuationNormalizer {
     /// 口语 → 符号映射；按 source 长度倒序匹配，避免「右括号」被「括号」覆盖
+    /// 这些规则**严格 isolated token 边界**才替换，防误伤"括号里的内容"等
     private static let rules: [(source: String, target: String)] = [
         ("回车", "\n"),
         ("换行", "\n"),
@@ -25,13 +26,21 @@ enum PunctuationNormalizer {
         ("括号", "（"),       // 兜底，仅在 left/right 未匹配时
     ]
 
+    /// 不要边界检查，全文匹配的"硬替换"规则
+    /// 用于在自然中文语境（无空白）下也想强制触发的口语词
+    /// 风险：如果用户真要打这两字（如"键盘空格键"），会被改。但语音输入里这种场景极少
+    private static let unboundedRules: [(source: String, target: String)] = [
+        ("空格", "\n"),       // 用户偏好：说"空格" 强制另起一行，不管前后是啥
+    ]
+
     /// 字符是否属于"会让左右成为非边界"的类型（中英字母 / 数字）
     private static func isWordChar(_ ch: Character) -> Bool {
         ch.isLetter || ch.isNumber
     }
 
     /// 应用 normalize，返回处理后的字符串
-    /// - 仅替换满足"独立 token"条件的 source
+    /// - 严格规则：仅替换满足"独立 token"条件的 source
+    /// - unboundedRules：不管边界，全文搜索替换
     static func apply(_ text: String) -> String {
         var result = text
         var hits: [String] = []
@@ -40,6 +49,14 @@ enum PunctuationNormalizer {
             while let range = findIsolatedRange(of: source, in: result) {
                 result.replaceSubrange(range, with: target)
                 hits.append("\(source)→\(target == "\n" ? "\\n" : target)")
+            }
+        }
+        // unboundedRules：全文替换（无边界）
+        for (source, target) in unboundedRules {
+            if result.contains(source) {
+                let count = result.components(separatedBy: source).count - 1
+                result = result.replacingOccurrences(of: source, with: target)
+                hits.append("\(source)→\(target == "\n" ? "\\n" : target)×\(count)")
             }
         }
         // SA 句号过频降级：「。」紧跟中文字（CJK）→「，」

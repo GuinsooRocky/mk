@@ -356,7 +356,7 @@ GUI | G U I | gu i
 IDE | I D E | i de
 JSON | jay son | je sin
 YAML | yam el | y am
-SaaS | sass | sa as
+SaaS | sa as
 B2B | b 2 b | bi tu bi
 B2C | b 2 c | bi tu si
 C2C | c 2 c | si tu si
@@ -378,8 +378,8 @@ REST | rest | rest ful
 RAG | rag | r a g
 LLM | l l m | el el em
 GPT | g p t | jee pee tee
-Claude | crowd | cloud
-LoRA | lora | lo ra
+Claude
+LoRA | lo ra
 QLoRA | q lora
 DPO | d p o
 RLHF | r l h f

@@ -295,7 +295,7 @@ SVG | s v g | sag
 PNG | p n g | peng
 WebP | web p | web pi
 WCAG | w cag
-ARIA | aria | a ri ya
+ARIA | a ri ya
 HSL | h s l
 RGB | r g b
 CMYK | c m y k

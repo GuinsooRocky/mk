@@ -260,12 +260,12 @@ ARPU | a pu | a 普
 A/B test | A B 测试 | a b 太 si
 PMF | P M F
 JTBD | J T B D
-SaaS | sass | sa s
+SaaS | sa s
 TAM | tam | tan
 SAM | sam
 SOM | som
 GTM | G T M
 USP | U S P
-RICE | rice | 瑞斯
+RICE | 瑞斯
 ICE | ice | 爱si
-MoSCoW | moscow | 莫斯科
+MoSCoW | 莫斯科

@@ -21,7 +21,7 @@ MK 直接解决这些。
 | 一句话级 push-to-talk 输入（按住右 Option 说话） | 长录音 / 会议纪要 |
 | 中文为主 + 技术英文混杂（`SwiftUI` / `Node.js` / `event loop` 不被音译） | 全英文段落 |
 | **150ms 落字延迟**（比 superwhisper 快 10 倍）+ 长句**分块流式**每 2s 出一段（菜单 toggle，Notes/文档类用）| 字级实时流（说一字出一字 — SA zh-CN 模型物理上做不到）|
-| 装在 .app 里 **472KB**（比 Notes.app 还小） | 离线 LLM 后处理 |
+| 装在 .app 里 **505KB zip / 1.1MB binary**（比 Notes.app 还小一个量级）| 离线 LLM 后处理 |
 | **越用越准**：错字手改一次自动入字典，下次同词不再错 | 跨设备 iCloud 同步学习成果 |
 | 输入到任何 app（cc 终端 / Notes / Safari / 飞书 / 有道云）| iOS / Linux / Windows |
 

@@ -42,10 +42,55 @@ enum PunctuationNormalizer {
                 hits.append("\(source)→\(target == "\n" ? "\\n" : target)")
             }
         }
+        // SA 句号过频降级：「。」紧跟中文字（CJK）→「，」
+        // 因为 SA 中文模型在每个停顿都加一个 。，但很多其实是句子内停顿
+        // 真句号只保留在「字符串结尾 / 紧跟空白 / 紧跟英文 / 紧跟其他标点」前
+        let demoted = demoteSentencePeriods(in: result, hits: &hits)
+        if demoted != result {
+            result = demoted
+        }
         if !hits.isEmpty {
             Logger.log("Punct", "normalize: \(hits.joined(separator: ", "))")
         }
         return result
+    }
+
+    /// 「。」+ 中日韩字符 → 「，」+ 中日韩字符
+    /// CJK Unified: U+4E00-U+9FFF（中文）、U+3040-U+30FF（日文假名）
+    private static func demoteSentencePeriods(in text: String, hits: inout [String]) -> String {
+        guard text.contains("。") else { return text }
+        var out = ""
+        out.reserveCapacity(text.count)
+        let chars = Array(text)
+        var demoteCount = 0
+        for i in 0..<chars.count {
+            let ch = chars[i]
+            if ch == "。", i + 1 < chars.count {
+                let next = chars[i + 1]
+                if isCJK(next) {
+                    out.append("，")
+                    demoteCount += 1
+                    continue
+                }
+            }
+            out.append(ch)
+        }
+        if demoteCount > 0 {
+            hits.append("。→，×\(demoteCount)")
+        }
+        return out
+    }
+
+    private static func isCJK(_ ch: Character) -> Bool {
+        for scalar in ch.unicodeScalars {
+            let v = scalar.value
+            // 中文（CJK Unified）
+            if (0x4E00...0x9FFF).contains(v) { return true }
+            // 日文平假名 + 片假名
+            if (0x3040...0x309F).contains(v) { return true }
+            if (0x30A0...0x30FF).contains(v) { return true }
+        }
+        return false
     }
 
     /// 找一个"独立 token"形式的 source 在 text 里的 range；找不到返回 nil

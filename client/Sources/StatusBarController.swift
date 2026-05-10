@@ -9,19 +9,9 @@ final class StatusBarController {
     private var isRecording = false
     private var remoteStatus: RemoteInbox.Status = .idle
 
-    // 会议模式
-    private var meetingSession: MeetingSession?
-    private let transcriptPanel = TranscriptPanelController()
-    private var isMeetingActive: Bool { meetingSession?.isRunning ?? false }
-
     init(moduleManager: ModuleManager) {
         self.moduleManager = moduleManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-
-        ModelServer.shared.onStatusChange = { [weak self] _ in
-            self?.updateIcon()
-            self?.setupMenu()
-        }
 
         updateIcon()
         setupMenu()
@@ -43,7 +33,6 @@ final class StatusBarController {
         let baseFont = NSFont.menuBarFont(ofSize: 0)
         let boldFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
 
-        // 录音视觉反馈交给 macOS 系统橙点；MK 始终只显示文字保持最小宽度
         button.image = nil
         button.contentTintColor = nil
         button.attributedTitle = NSAttributedString(
@@ -61,53 +50,39 @@ final class StatusBarController {
         menu.addItem(NSMenuItem(title: "MK 语音输入", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
-        // 服务器状态
-        let serverItem = NSMenuItem(title: serverMenuTitle, action: nil, keyEquivalent: "")
-        menu.addItem(serverItem)
-
-        let modelItem = NSMenuItem(title: modelMenuTitle, action: nil, keyEquivalent: "")
-        menu.addItem(modelItem)
-
-        let reconnectItem = NSMenuItem(
-            title: "检查服务器连接",
-            action: #selector(checkServer),
-            keyEquivalent: ""
-        )
-        reconnectItem.target = self
-        menu.addItem(reconnectItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // 会议模式
-        if isMeetingActive {
-            let stopMeeting = NSMenuItem(
-                title: "结束会议",
-                action: #selector(toggleMeeting),
-                keyEquivalent: "m"
-            )
-            stopMeeting.target = self
-            menu.addItem(stopMeeting)
-        } else {
-            let startMeeting = NSMenuItem(
-                title: "开始会议录音",
-                action: #selector(toggleMeeting),
-                keyEquivalent: "m"
-            )
-            startMeeting.target = self
-            menu.addItem(startMeeting)
-        }
-
-        // 远程语音
+        // 远程语音（iOS Shortcut HTTP push 时才显示）
         if remoteStatus != .idle {
-            menu.addItem(NSMenuItem.separator())
             let port = RuntimeConfig.shared.remoteConfig["port"] as? Int ?? 9800
             let remoteItem = NSMenuItem(title: "远程语音：\(remoteStatus.rawValue) (:\(port))", action: nil, keyEquivalent: "")
             menu.addItem(remoteItem)
+            menu.addItem(NSMenuItem.separator())
         }
+
+        // 流式注入 toggle（实验，默认关）；对钩放在标题后面（不用 state）
+        let streamingEnabled = (RuntimeConfig.shared.polishConfig["streaming_enabled"] as? Bool) ?? false
+        let streamingTitle = "流式注入（实验，仅 Notes/文档类）" + (streamingEnabled ? "  ✓" : "")
+        let streamingItem = NSMenuItem(
+            title: streamingTitle,
+            action: #selector(toggleStreaming),
+            keyEquivalent: ""
+        )
+        streamingItem.target = self
+        menu.addItem(streamingItem)
+
+        // 学习模式 toggle（默认开）：注入 30s 内监听用户改字，自动入字典
+        let learningEnabled = (RuntimeConfig.shared.polishConfig["learning_enabled"] as? Bool) ?? true
+        let learningTitle = "学习模式（注入后 30s 自动学）" + (learningEnabled ? "  ✓" : "")
+        let learningItem = NSMenuItem(
+            title: learningTitle,
+            action: #selector(toggleLearning),
+            keyEquivalent: ""
+        )
+        learningItem.target = self
+        menu.addItem(learningItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        // 配置与数据
+        // 热键设置
         let hotkeyTitle: String = {
             let cfg = HotKeyConfig.load(from: RuntimeConfig.shared.hotKeyConfig)
             return "设置热键... (\(cfg.displayName))"
@@ -120,30 +95,6 @@ final class StatusBarController {
         hotkeyItem.target = self
         menu.addItem(hotkeyItem)
 
-        let configItem = NSMenuItem(
-            title: "编辑配置文件...",
-            action: #selector(openConfig),
-            keyEquivalent: ","
-        )
-        configItem.target = self
-        menu.addItem(configItem)
-
-        let dataItem = NSMenuItem(
-            title: "打开数据目录...",
-            action: #selector(openDataDir),
-            keyEquivalent: ""
-        )
-        dataItem.target = self
-        menu.addItem(dataItem)
-
-        let logItem = NSMenuItem(
-            title: "查看日志...",
-            action: #selector(openLog),
-            keyEquivalent: ""
-        )
-        logItem.target = self
-        menu.addItem(logItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
@@ -153,154 +104,24 @@ final class StatusBarController {
         statusItem.menu = menu
     }
 
-    private var serverMenuTitle: String {
-        let status = ModelServer.shared.status
-        let endpoint = RuntimeConfig.shared.serverConfig["endpoint"] as? String ?? "未配置"
-        switch status {
-        case .connected:
-            return "服务器：已连接 (\(endpoint))"
-        case .disconnected:
-            return "服务器：未连接 (\(endpoint))"
-        case .unknown:
-            return "服务器：检测中..."
-        }
-    }
-
-    private var modelMenuTitle: String {
-        let model = RuntimeConfig.shared.serverConfig["model"] as? String ?? "未配置"
-        return "模型：\(model)"
-    }
-
-
-    @objc private func checkServer() {
-        Task {
-            await ModelServer.shared.checkHealth()
-            setupMenu()
-            updateIcon()
-        }
-    }
-
-    @objc private func toggleMeeting() {
-        if isMeetingActive {
-            stopMeeting()
-        } else {
-            startMeeting()
-        }
-    }
-
-    private func startMeeting() {
-        let session = MeetingSession()
-        self.meetingSession = session
-
-        // 实时转写回调 → 更新面板
-        var wordCount = 0
-        session.onTranscriptUpdate = { [weak self] text, isFinal in
-            guard let self else { return }
-            if isFinal {
-                wordCount += text.count
-                let segment = MeetingSegment(
-                    text: text,
-                    rawText: text,
-                    startTime: self.meetingSession?.duration ?? 0,
-                    endTime: self.meetingSession?.duration ?? 0,
-                    speakerId: nil,
-                    l2Kind: .skipped,
-                    isFinal: true
-                )
-                self.transcriptPanel.appendSegment(segment)
-                self.transcriptPanel.updateStatus(
-                    duration: self.meetingSession?.duration ?? 0,
-                    wordCount: wordCount
-                )
-            }
-        }
-
-        session.onDurationUpdate = { [weak self] duration in
-            guard let self else { return }
-            self.transcriptPanel.updateStatus(
-                duration: duration,
-                wordCount: wordCount
-            )
-        }
-
-        // 显示转录面板
-        transcriptPanel.clear()
-        transcriptPanel.setRecording(true)
-        transcriptPanel.show()
-
-        Task {
-            do {
-                try await session.start()
-                Logger.log("StatusBar", "Meeting started")
-                self.setupMenu()
-                self.updateMeetingIcon()
-            } catch {
-                Logger.log("StatusBar", "Meeting start failed: \(error)")
-                self.meetingSession = nil
-                self.transcriptPanel.hide()
-            }
-        }
-    }
-
-    private func stopMeeting() {
-        guard let session = meetingSession else { return }
-        transcriptPanel.setRecording(false)
-
-        Task {
-            let result = await session.stop()
-            self.meetingSession = nil
-
-            // 更新面板显示最终结果（带说话人标签）
-            if !result.segments.isEmpty {
-                self.transcriptPanel.updateTranscript(segments: result.segments)
-            }
-
-            // 导出 Markdown
-            if let url = MeetingExporter.exportMarkdown(
-                segments: result.segments,
-                duration: result.duration
-            ) {
-                Logger.log("StatusBar", "Meeting exported: \(url.lastPathComponent)")
-            }
-
-            self.setupMenu()
-            self.updateMeetingIcon()
-            Logger.log("StatusBar", "Meeting stopped, \(result.segments.count) segments, \(String(format: "%.0f", result.duration))s")
-        }
-    }
-
-    private func updateMeetingIcon() {
-        guard let button = statusItem.button else { return }
-        if isMeetingActive {
-            button.title = "WE◉"
-            button.contentTintColor = .systemOrange
-        } else if !isRecording {
-            updateIcon()
-        }
-    }
-
     @objc private func openHotKeySettings() {
         HotKeySettingsWindow.shared.show()
     }
 
-    @objc private func openConfig() {
-        let configURL = WEDataDir.url.appendingPathComponent("config.json")
-        // 确保配置文件存在
-        if !FileManager.default.fileExists(atPath: configURL.path) {
-            _ = RuntimeConfig.shared  // 触发默认配置创建
-        }
-        NSWorkspace.shared.open(configURL)
+    @objc private func toggleStreaming() {
+        let current = (RuntimeConfig.shared.polishConfig["streaming_enabled"] as? Bool) ?? false
+        let newValue = !current
+        RuntimeConfig.shared.setPolishField("streaming_enabled", value: newValue)
+        Logger.log("StatusBar", "Streaming toggled to \(newValue)")
+        setupMenu()
     }
 
-    @objc private func openDataDir() {
-        NSWorkspace.shared.open(WEDataDir.url)
-    }
-
-    @objc private func openLog() {
-        let logURL = WEDataDir.url.appendingPathComponent("debug.log")
-        if FileManager.default.fileExists(atPath: logURL.path) {
-            NSWorkspace.shared.open(logURL)
-        }
+    @objc private func toggleLearning() {
+        let current = (RuntimeConfig.shared.polishConfig["learning_enabled"] as? Bool) ?? true
+        let newValue = !current
+        RuntimeConfig.shared.setPolishField("learning_enabled", value: newValue)
+        Logger.log("StatusBar", "Learning toggled to \(newValue)")
+        setupMenu()
     }
 
     @objc private func quit() {

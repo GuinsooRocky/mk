@@ -27,10 +27,13 @@ enum FillerRemover {
         // 1) 删 boundary 之间的单字 filler
         var result = removeIsolatedFillers(text, hits: &hits)
 
-        // 2) 压缩 2-3 字符重复（先长后短，先压 "是的是的是的"，再压 "对对对"）
-        result = compressRepeats(result, blockLength: 3, hits: &hits)
-        result = compressRepeats(result, blockLength: 2, hits: &hits)
-        result = compressRepeats(result, blockLength: 1, hits: &hits)
+        // 2) 压缩 1-3 字符重复
+        // 1-char：保持 ≥3 次起压（防误伤"看看/试试/好好/慢慢"等合法叠词）
+        // 2-char / 3-char：≥2 次起压（覆盖口吃，"直接直接/其实其实/刚才刚才/不知道不知道"）
+        // 顺序：先长后短，避免 "是的是的是的" 被 1-char 路径先吃了
+        result = compressRepeats(result, blockLength: 3, minRepeats: 2, hits: &hits)
+        result = compressRepeats(result, blockLength: 2, minRepeats: 2, hits: &hits)
+        result = compressRepeats(result, blockLength: 1, minRepeats: 3, hits: &hits)
 
         // 3) 清理孤儿标点 / 多余空白（filler 删除后留下的 " ，  ，" 等）
         result = cleanupOrphanPunctuation(result)
@@ -111,11 +114,14 @@ enum FillerRemover {
         return String(out)
     }
 
-    /// 压缩 N 字符重复（≥ 3 次）成 1 次
-    /// 例：blockLength=2 → "是的是的是的" → "是的"
-    private static func compressRepeats(_ text: String, blockLength: Int, hits: inout [String]) -> String {
+    /// 压缩 N 字符重复成 1 次
+    /// 例：blockLength=2, minRepeats=2 → "直接直接" → "直接"
+    /// 例：blockLength=2, minRepeats=3 → "是的是的是的" → "是的"（"是的是的" 不动）
+    private static func compressRepeats(_ text: String, blockLength: Int, minRepeats: Int = 3, hits: inout [String]) -> String {
         guard blockLength >= 1 && blockLength <= 3 else { return text }
-        let pattern = "(.{\(blockLength)})\\1{2,}"
+        guard minRepeats >= 2 else { return text }
+        // (.{N})\1{minRepeats - 1,} 表示总共 ≥ minRepeats 个 N 长度块
+        let pattern = "(.{\(blockLength)})\\1{\(minRepeats - 1),}"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
             return text
         }

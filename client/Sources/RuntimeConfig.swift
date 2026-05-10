@@ -35,11 +35,6 @@ final class RuntimeConfig {
         values["remote"] as? [String: Any] ?? [:]
     }
 
-    /// 会议模式配置
-    var meetingConfig: [String: Any] {
-        values["meeting"] as? [String: Any] ?? [:]
-    }
-
     /// 全局热键配置
     var hotKeyConfig: [String: Any] {
         values["hotkey"] as? [String: Any] ?? [:]
@@ -48,6 +43,14 @@ final class RuntimeConfig {
     /// 持久化新的 hotkey 配置（设置窗口保存时调用）
     func updateHotKeyConfig(_ dict: [String: Any]) {
         values["hotkey"] = dict
+        save()
+    }
+
+    /// 修改 polish.<key> = value 并落盘（菜单 toggle 调用）
+    func setPolishField(_ key: String, value: Any) {
+        var polish = polishConfig
+        polish[key] = value
+        values["polish"] = polish
         save()
     }
 
@@ -98,12 +101,6 @@ final class RuntimeConfig {
                     "enabled": true,
                     "port": 9800,
                     "auth_token": ""
-                ],
-                "meeting": [
-                    "l2_flush_on_pause_sec": 1.5,
-                    "l2_flush_on_chars": 200,
-                    "l2_min_chars": 30,
-                    "audio_source": "mic"
                 ],
                 "hotkey": [
                     "keyCode": 61,

@@ -16,6 +16,8 @@ final class CorrectionDictionary {
 
     /// SA hint 用 — 全量（去重 + cap 后）
     private(set) var terms: [String] = []
+    /// terms 的 Set 形式，pinyin Layer 3 用来跳过"输入子串本身就是字典正字"的情况
+    private(set) var termsSet: Set<String> = []
     /// Levenshtein 兜底用 — terms 前 maxCorrectionTerms 个
     private(set) var correctionTerms: [String] = []
     /// 错音 → 正字
@@ -26,7 +28,50 @@ final class CorrectionDictionary {
     private(set) var errKeysByFirstChar: [Character: [String]] = [:]
     /// correctionTerms 中 ASCII 词按长度分桶（Levenshtein 用）
     private(set) var asciiCorrectionByLength: [Int: [String]] = [:]
+    /// **算法 A**：拼音 → 字典中文正字反向索引（液 shi → 流式）
+    /// 第 1 个写入的 term 胜出（先来先得）；同音字若有多个 term 时认第一个。
+    private(set) var chinesePinyinIndex: [String: String] = [:]
+    /// **算法 B**：英文短语 token-wise Levenshtein 索引
+    /// 按 token 数分桶（"event loop" 进 [2]，"Apple Developer ID" 进 [3]）
+    /// 每个 phrase 是 (tokens: [String], canonical: String)
+    private(set) var englishPhrasesByTokenCount: [Int: [(tokens: [String], canonical: String)]] = [:]
+    /// **算法 C**：metaphone 音相似度 → 英文单 token canonical
+    /// "depsec" / "depshake" 都 metaphone 成 "TPSK" → 全归 "DeepSeek"
+    private(set) var metaphoneIndex: [String: String] = [:]
     private(set) var loadedPath: String?
+
+    // MARK: - 纠错记录 + Gate（#3 + #1 V0）
+
+    /// 每条替换的可解释记录
+    /// 灵感：Anthropic 内省机制论文的 Evidence Carrier + Gate 模式
+    struct CorrectionRecord {
+        let layer: String          // "L1-exact-manual" / "L1-exact-synth" / "L2-lev" / "L3-pinyin" / "L4-phrase" / "L5-meta"
+        let original: String
+        let replacement: String
+        let confidence: Double     // 0..1
+        let reason: String         // 人类可读
+        let accepted: Bool         // Gate 决策结果
+    }
+
+    /// 上次 correct() 产生的所有替换记录（含被 Gate 拒绝的）
+    /// VoicePipeline 用它写 VoiceHistory 做审计；未来 Gate 调参也基于这个
+    private(set) var lastCorrections: [CorrectionRecord] = []
+
+    /// Gate V0：permissive 阈值，记录而不改行为
+    /// 阈值由 polish.gate_threshold 配（缺省 0.0 = 全接受）；调到 0.5 开始过滤低信心替换
+    private var gateThreshold: Double {
+        (RuntimeConfig.shared.polishConfig["gate_threshold"] as? Double) ?? 0.0
+    }
+
+    /// Gate 决策：true = 应用替换，false = 拒绝
+    /// V0 简单按阈值过滤；V1 可加多源加权（拼写距离 × 长度 × 历史采纳率 × 应用上下文）
+    private func gateAccept(_ confidence: Double) -> Bool {
+        return confidence >= gateThreshold
+    }
+
+    /// mtime 缓存：上次 loadAll 时各文件的 (path → mtime)
+    /// 同样 paths 列表 + 各文件 mtime 都不变 → skip reload（每次录音省 ~10ms）
+    private var lastLoadedMtimes: [String: TimeInterval] = [:]
 
     /// 英文 stop words / 极短常用词 — synth 派生小写时若撞到这里则跳过，避免 AND→and 这类把 bandwidth 改成 bANDwidth 的事故
     /// 也用于 Levenshtein 白名单（系统词典 + 这里都视为"已经对的"）
@@ -135,8 +180,25 @@ final class CorrectionDictionary {
     /// - 先读完所有源 → 去重 → cap maxHintTerms → 取前 maxCorrectionTerms 做 correction 子集
     /// - manual `|` 错音映射全保留（不受 cap 影响）
     /// - C5 synth 仅对 correctionTerms 派生
+    /// - mtime 缓存：同样文件 + 同样 mtime → skip（每次录音前调省 ~10ms）
     @discardableResult
     func loadAll(from paths: [String]) -> Bool {
+        // mtime 检查：所有文件都没变 + paths 列表也一致 → skip
+        var currentMtimes: [String: TimeInterval] = [:]
+        for path in paths {
+            let expanded = (path as NSString).expandingTildeInPath
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: expanded),
+               let mt = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 {
+                currentMtimes[expanded] = mt
+            }
+        }
+        if !lastLoadedMtimes.isEmpty,
+           currentMtimes.keys.sorted() == lastLoadedMtimes.keys.sorted(),
+           currentMtimes.allSatisfy({ lastLoadedMtimes[$0.key] == $0.value }) {
+            // 全 hit cache，跳
+            return true
+        }
+
         // 1) 读取 + 去重（保留首次出现顺序）
         var combinedTerms: [String] = []
         var manualCorrections: [String: String] = [:]
@@ -204,11 +266,68 @@ final class CorrectionDictionary {
 
         // 5) 提交
         terms = cappedTerms
+        termsSet = Set(cappedTerms)
         correctionTerms = cappedCorrection
         corrections = allCorrections
         let sortedKeys = allCorrections.keys.sorted { $0.count > $1.count }
         sortedErrorKeys = sortedKeys
         asciiCorrectionByLength = bucketed
+        // 算法 A：建拼音 → 字典中文正字反向索引
+        var pinyinIdx: [String: String] = [:]
+        var pinyinDup = 0
+        for term in cappedTerms {
+            guard let key = Self.pinyinKey(term) else { continue }
+            if pinyinIdx[key] == nil {
+                pinyinIdx[key] = term
+            } else {
+                pinyinDup += 1
+            }
+        }
+        chinesePinyinIndex = pinyinIdx
+
+        // 算法 B：建英文短语 token-wise Levenshtein 索引（按 token 数分桶）
+        // 仅 ASCII letters / 点 / 横线 的多 token term 入索引
+        var phrasesIdx: [Int: [(tokens: [String], canonical: String)]] = [:]
+        var phraseTermCount = 0
+        for term in cappedTerms {
+            let trimmed = term.trimmingCharacters(in: .whitespaces)
+            let parts = trimmed.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+            guard parts.count >= 2, parts.count <= 4 else { continue }
+            // 全部 ASCII（字母/数字/. -）才入；中文/混合短语跳过
+            let allAsciiPhraseChars = parts.allSatisfy { tok in
+                tok.allSatisfy { c in
+                    c.isASCII && (c.isLetter || c.isNumber || c == "." || c == "-")
+                }
+            }
+            guard allAsciiPhraseChars else { continue }
+            phrasesIdx[parts.count, default: []].append((tokens: parts, canonical: trimmed))
+            phraseTermCount += 1
+        }
+        englishPhrasesByTokenCount = phrasesIdx
+
+        // 算法 C：建 metaphone → 英文单 token canonical 索引
+        // 仅纯 ASCII letters，长度 ≥ 4（短词噪音多）
+        var metaIdx: [String: String] = [:]
+        var metaDup = 0
+        for term in cappedTerms {
+            let t = term.trimmingCharacters(in: .whitespaces)
+            // 单 token only（多 token 走算法 B），全 ASCII letters，长度 ≥ 4
+            guard !t.isEmpty,
+                  !t.contains(" "),
+                  t.count >= 4,
+                  t.allSatisfy({ $0.isASCII && $0.isLetter }) else { continue }
+            // 跳过 stop word / 常见英文词避免污染
+            let lower = t.lowercased()
+            if Self.englishStopWords.contains(lower) || Self.commonEnglishWords.contains(lower) { continue }
+            let key = Self.metaphone(t)
+            if key.isEmpty { continue }
+            if metaIdx[key] == nil {
+                metaIdx[key] = t
+            } else {
+                metaDup += 1
+            }
+        }
+        metaphoneIndex = metaIdx
 
         // 首字符桶（Layer 1 single-pass 用）：每桶内已按 length 倒序（沿用 sortedKeys 顺序）
         var byFirst: [Character: [String]] = [:]
@@ -220,10 +339,11 @@ final class CorrectionDictionary {
         errKeysByFirstChar = byFirst
 
         loadedPath = loadedPaths.joined(separator: ", ")
+        lastLoadedMtimes = currentMtimes
 
         let dropped = combinedTerms.count - cappedTerms.count
         let dropMsg = dropped > 0 ? " [dropped \(dropped) over hint cap \(Self.maxHintTerms)]" : ""
-        Logger.log("Dict", "Total: hint=\(cappedTerms.count) correction=\(cappedCorrection.count) errKeys=\(allCorrections.count) (manual=\(manualCount), synth=\(synthesized)) buckets=\(bucketed.count)\(dropMsg)")
+        Logger.log("Dict", "Total: hint=\(cappedTerms.count) correction=\(cappedCorrection.count) errKeys=\(allCorrections.count) (manual=\(manualCount), synth=\(synthesized)) buckets=\(bucketed.count) pinyin=\(pinyinIdx.count)(\(pinyinDup) dup) phrases=\(phraseTermCount) meta=\(metaIdx.count)(\(metaDup) dup)\(dropMsg)")
         return true
     }
 
@@ -302,6 +422,7 @@ final class CorrectionDictionary {
         let tStart = CFAbsoluteTimeGetCurrent()
         var hits: [String] = []
         var result = text
+        lastCorrections.removeAll()  // 重置上次记录
 
         // Layer 1: single-pass left-to-right + 长词优先 + word boundary
         if !errKeysByFirstChar.isEmpty {
@@ -332,6 +453,21 @@ final class CorrectionDictionary {
                                 let leftBlocks = errStartIsWord && leftIsWord
                                 let rightBlocks = errEndIsWord && rightIsWord
                                 if leftBlocks || rightBlocks { continue }
+
+                                // L1 exact: confidence = 0.95（最高，因为是字典精确匹配）
+                                let conf = 0.95
+                                let accept = gateAccept(conf)
+                                let record = CorrectionRecord(
+                                    layer: "L1-exact", original: err, replacement: correct,
+                                    confidence: conf,
+                                    reason: "exact dict match",
+                                    accepted: accept
+                                )
+                                lastCorrections.append(record)
+                                if !accept {
+                                    Logger.log("Dict", "[Gate-reject] L1: \(err)→\(correct) conf=\(conf) < threshold")
+                                    continue
+                                }
 
                                 newResult += correct
                                 i += errChars.count
@@ -382,19 +518,422 @@ final class CorrectionDictionary {
                     }
                 }
                 if let b = best {
-                    result = result.replacingOccurrences(of: tok, with: b.term)
-                    hits.append("~\(tok)→\(b.term)(d=\(b.dist))")
+                    // L2 Lev: confidence = 1 - dist/len，floor 0.5
+                    let conf = max(0.5, 1.0 - Double(b.dist) / Double(tok.count))
+                    let accept = gateAccept(conf)
+                    let record = CorrectionRecord(
+                        layer: "L2-lev", original: tok, replacement: b.term,
+                        confidence: conf,
+                        reason: "Levenshtein dist=\(b.dist) on len=\(tok.count)",
+                        accepted: accept
+                    )
+                    lastCorrections.append(record)
+                    if accept {
+                        result = result.replacingOccurrences(of: tok, with: b.term)
+                        hits.append("~\(tok)→\(b.term)(d=\(b.dist),c=\(String(format: "%.2f", conf)))")
+                    } else {
+                        Logger.log("Dict", "[Gate-reject] L2: \(tok)→\(b.term) conf=\(String(format: "%.2f", conf))")
+                    }
                 }
             }
         }
 
+        // Layer 4 (算法 B): 英文短语 token-wise Levenshtein
+        // 扫输入里连续 ASCII token 序列（2-4 token 滑窗），跟字典短语桶对齐
+        // 每对 token Levenshtein ≤1 + 总和 ≤ 桶 token 数 → 整体替换
+        if !englishPhrasesByTokenCount.isEmpty {
+            result = applyEnglishPhraseFuzzy(result, hits: &hits)
+        }
+
+        // Layer 5 (算法 C): metaphone 英文音相似度
+        // 单 ASCII token Levenshtein 抓不到时（拼写差距大但发音近）兜底
+        if !metaphoneIndex.isEmpty {
+            result = applyMetaphoneFuzzy(result, hits: &hits)
+        }
+
+        // Layer 3: 拼音哈希模糊匹配（中文同音字）
+        // 输入文本中扫描 2-4 字 CJK 子串 → 算拼音 → 反向索引找正字 → 替换
+        // 跳过：子串本身就是字典正字 / 拼音不在索引 / 正字 == 子串
+        if !chinesePinyinIndex.isEmpty {
+            let chars = Array(result)
+            var newOut = ""
+            newOut.reserveCapacity(result.count)
+            var i = 0
+            while i < chars.count {
+                var matched = false
+                if let scalar = chars[i].unicodeScalars.first, Self.isCJKScalar(scalar) {
+                    // 试 4 → 3 → 2 字（长优先）
+                    let maxLen = min(4, chars.count - i)
+                    for L in stride(from: maxLen, through: 2, by: -1) {
+                        let substr = String(chars[i..<i + L])
+                        // 必须全是 CJK 字（不夹 ASCII）
+                        let allCJK = substr.unicodeScalars.allSatisfy(Self.isCJKScalar)
+                        guard allCJK else { continue }
+                        // 跳过：子串本身就是字典里的正字
+                        if termsSet.contains(substr) { continue }
+                        // 查拼音索引
+                        guard let key = Self.pinyinKey(substr),
+                              let canonical = chinesePinyinIndex[key],
+                              canonical != substr else { continue }
+                        // L3 pinyin confidence：长度越长越可信（2字 0.65 / 3字 0.78 / 4字 0.88）
+                        let conf = 0.5 + Double(L) * 0.1
+                        let accept = gateAccept(conf)
+                        let record = CorrectionRecord(
+                            layer: "L3-pinyin", original: substr, replacement: canonical,
+                            confidence: conf,
+                            reason: "pinyin=\(key) match, len=\(L)",
+                            accepted: accept
+                        )
+                        lastCorrections.append(record)
+                        if !accept {
+                            Logger.log("Dict", "[Gate-reject] L3: \(substr)→\(canonical) conf=\(String(format: "%.2f", conf))")
+                            continue
+                        }
+                        // 命中：替换
+                        newOut += canonical
+                        i += L
+                        hits.append("≈\(substr)→\(canonical)(c=\(String(format: "%.2f", conf)))")
+                        matched = true
+                        break
+                    }
+                }
+                if !matched {
+                    newOut.append(chars[i])
+                    i += 1
+                }
+            }
+            result = newOut
+        }
+
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - tStart) * 1000
+        let acceptedCount = lastCorrections.filter { $0.accepted }.count
+        let rejectedCount = lastCorrections.count - acceptedCount
+        let gateNote = rejectedCount > 0 ? " [gate rejected \(rejectedCount)]" : ""
         if !hits.isEmpty {
-            Logger.log("Dict", "correct \(String(format: "%.1fms", elapsedMs)) (\(text.count)c): \(hits.joined(separator: ", "))")
+            Logger.log("Dict", "correct \(String(format: "%.1fms", elapsedMs)) (\(text.count)c)\(gateNote): \(hits.joined(separator: ", "))")
         } else if elapsedMs > 5 {
-            Logger.log("Dict", "correct slow \(String(format: "%.1fms", elapsedMs)) (\(text.count)c, no hits)")
+            Logger.log("Dict", "correct slow \(String(format: "%.1fms", elapsedMs)) (\(text.count)c, no hits)\(gateNote)")
         }
         return result
+    }
+
+    // MARK: - 短语 fuzzy（算法 B）
+
+    /// 在 text 中找连续 ASCII token 序列，按 2-4 token 滑窗匹配字典短语
+    /// 每对 token Levenshtein ≤1 + 总和 ≤ 桶 token 数 / 2 + 1 → 替换
+    private func applyEnglishPhraseFuzzy(_ text: String, hits: inout [String]) -> String {
+        // 1) 用空白分 token，记录每个 token 在原文的 range
+        let chars = Array(text)
+        struct Tok { let str: String; let start: Int; let end: Int }
+        var toks: [Tok] = []
+        var i = 0
+        while i < chars.count {
+            // skip 非 token 字符
+            if !chars[i].isASCII || (!chars[i].isLetter && !chars[i].isNumber && chars[i] != "." && chars[i] != "-") {
+                i += 1
+                continue
+            }
+            let start = i
+            while i < chars.count, chars[i].isASCII, (chars[i].isLetter || chars[i].isNumber || chars[i] == "." || chars[i] == "-") {
+                i += 1
+            }
+            let s = String(chars[start..<i])
+            toks.append(Tok(str: s, start: start, end: i))
+        }
+        guard !toks.isEmpty else { return text }
+
+        // 2) 按 token 数（2..4）尝试匹配；桶里每个 phrase 跟 window token-wise 算 Lev 总和
+        // 用一个 (start, end, replacement) 列表记录所有命中，按 start 顺序拼回去
+        struct Hit { let start: Int; let end: Int; let replacement: String; let summary: String }
+        var winHits: [Hit] = []
+        var idx = 0
+        while idx < toks.count {
+            var matchedAny = false
+            for L in [4, 3, 2] where idx + L <= toks.count {
+                guard let bucket = englishPhrasesByTokenCount[L] else { continue }
+                let window = Array(toks[idx..<idx + L])
+                let windowJoined = window.map { $0.str }.joined(separator: " ")
+                // 跳过：window 整体已经是某个 canonical（避免无谓重写）
+                if bucket.contains(where: { $0.canonical == windowJoined }) { continue }
+                // 阈值：每对 token 平均 Lev ≤1，总和 ≤ L（不严格上限：让 4 token 短语容忍 4 个字符差）
+                let perTokenMaxDist = 1
+                let totalMaxDist = L
+                var best: (canonical: String, totalDist: Int)?
+                for ph in bucket {
+                    var total = 0
+                    var skip = false
+                    for k in 0..<L {
+                        let d = Self.levenshtein(window[k].str.lowercased(), ph.tokens[k].lowercased())
+                        if d > perTokenMaxDist { skip = true; break }
+                        total += d
+                    }
+                    if skip || total > totalMaxDist || total == 0 { continue }
+                    if best == nil || total < best!.totalDist {
+                        best = (canonical: ph.canonical, totalDist: total)
+                    }
+                }
+                if let b = best {
+                    // L4 phrase confidence = 1 - totalDist / totalCharLen，floor 0.5
+                    let totalLen = window.reduce(0) { $0 + $1.str.count }
+                    let conf = max(0.5, 1.0 - Double(b.totalDist) / Double(totalLen))
+                    let accept = gateAccept(conf)
+                    let record = CorrectionRecord(
+                        layer: "L4-phrase", original: windowJoined, replacement: b.canonical,
+                        confidence: conf,
+                        reason: "phrase Lev totalDist=\(b.totalDist) on \(L) tokens",
+                        accepted: accept
+                    )
+                    lastCorrections.append(record)
+                    if !accept {
+                        Logger.log("Dict", "[Gate-reject] L4: \(windowJoined)→\(b.canonical) conf=\(String(format: "%.2f", conf))")
+                        idx += 1
+                        matchedAny = true
+                        break
+                    }
+                    let startIdx = window.first!.start
+                    let endIdx = window.last!.end
+                    winHits.append(Hit(start: startIdx, end: endIdx, replacement: b.canonical, summary: "≈\(windowJoined)→\(b.canonical)(td=\(b.totalDist),c=\(String(format: "%.2f", conf)))"))
+                    idx += L
+                    matchedAny = true
+                    break
+                }
+            }
+            if !matchedAny { idx += 1 }
+        }
+        guard !winHits.isEmpty else { return text }
+
+        // 3) 按 start 顺序拼回 result
+        var out = ""
+        out.reserveCapacity(text.count)
+        var cursor = 0
+        for h in winHits.sorted(by: { $0.start < $1.start }) {
+            if h.start > cursor {
+                out += String(chars[cursor..<h.start])
+            }
+            out += h.replacement
+            cursor = h.end
+            hits.append(h.summary)
+        }
+        if cursor < chars.count {
+            out += String(chars[cursor..<chars.count])
+        }
+        return out
+    }
+
+    // MARK: - Metaphone（算法 C）
+
+    /// 在 text 中找单 ASCII token，算 metaphone，查反向索引找 canonical 替换
+    /// 跳过：token 长度 < 4 / 已经是 dict canonical / metaphone key 不在索引
+    private func applyMetaphoneFuzzy(_ text: String, hits: inout [String]) -> String {
+        let chars = Array(text)
+        var out = ""
+        out.reserveCapacity(text.count)
+        var i = 0
+        while i < chars.count {
+            // 找连续 ASCII letter token
+            if !chars[i].isASCII || !chars[i].isLetter {
+                out.append(chars[i])
+                i += 1
+                continue
+            }
+            let start = i
+            while i < chars.count, chars[i].isASCII, chars[i].isLetter {
+                i += 1
+            }
+            let tok = String(chars[start..<i])
+            // 长度 ≥ 4 才查
+            guard tok.count >= 4 else {
+                out += tok
+                continue
+            }
+            // 已经是 dict canonical / 常见英文 → 不动
+            if termsSet.contains(tok)
+               || Self.englishStopWords.contains(tok.lowercased())
+               || Self.commonEnglishWords.contains(tok.lowercased()) {
+                out += tok
+                continue
+            }
+            let key = Self.metaphone(tok)
+            if !key.isEmpty, let canonical = metaphoneIndex[key], canonical != tok {
+                // L5 metaphone confidence：基础 0.6 + 长 token 加成
+                let conf = 0.6 + (tok.count >= 6 ? 0.1 : 0.0) + (canonical.count >= 6 ? 0.1 : 0.0)
+                let accept = gateAccept(conf)
+                let record = CorrectionRecord(
+                    layer: "L5-meta", original: tok, replacement: canonical,
+                    confidence: conf,
+                    reason: "metaphone=\(key) match",
+                    accepted: accept
+                )
+                lastCorrections.append(record)
+                if accept {
+                    out += canonical
+                    hits.append("♪\(tok)→\(canonical)(meta=\(key),c=\(String(format: "%.2f", conf)))")
+                } else {
+                    Logger.log("Dict", "[Gate-reject] L5: \(tok)→\(canonical) conf=\(String(format: "%.2f", conf))")
+                    out += tok
+                }
+            } else {
+                out += tok
+            }
+        }
+        return out
+    }
+
+    /// Metaphone 算法（Lawrence Philips, 1990）— 把英文单词转成"音相似"的 key
+    /// 实现：经典规则集，~50 行；同音/近音词产生相同/相似 key（DeepSeek/depsec → "TPSK"）
+    static func metaphone(_ str: String) -> String {
+        // 1) 大写化 + 只留 ASCII letters
+        var s = ""
+        for ch in str.uppercased() {
+            if ch.isASCII && ch.isLetter { s.append(ch) }
+        }
+        guard !s.isEmpty else { return "" }
+        let chars = Array(s)
+        var i = 0
+        var result = ""
+
+        // 处理首字符特殊情况
+        if chars.count >= 2 {
+            let first2 = String(chars[0...1])
+            if ["AE", "GN", "KN", "PN", "WR"].contains(first2) {
+                i = 1  // 跳过首字符（silent）
+            } else if first2 == "WH" {
+                i = 1
+            } else if chars[0] == "X" {
+                result.append("S")
+                i = 1
+            }
+        }
+
+        while i < chars.count {
+            let ch = chars[i]
+            let prev: Character? = i > 0 ? chars[i - 1] : nil
+            let next: Character? = i + 1 < chars.count ? chars[i + 1] : nil
+            let next2: Character? = i + 2 < chars.count ? chars[i + 2] : nil
+
+            // 跳过相邻重复字母（C 除外）
+            if let p = prev, p == ch, ch != "C" {
+                i += 1
+                continue
+            }
+
+            switch ch {
+            case "A", "E", "I", "O", "U":
+                if i == 0 { result.append(ch) }
+            case "B":
+                if !(i == chars.count - 1 && prev == "M") {
+                    result.append("B")
+                }
+            case "C":
+                if next == "I" && next2 == "A" {
+                    result.append("X")
+                } else if next == "H" {
+                    result.append(prev == "S" ? "K" : "X")
+                    i += 1  // 跳过 H
+                } else if let n = next, "EIY".contains(n) {
+                    result.append("S")
+                } else {
+                    result.append("K")
+                }
+            case "D":
+                if next == "G", let n2 = next2, "EIY".contains(n2) {
+                    result.append("J")
+                    i += 1  // 跳过 G
+                } else {
+                    result.append("T")
+                }
+            case "F", "J", "L", "M", "N", "R":
+                result.append(ch)
+            case "G":
+                if next == "H" {
+                    if i + 2 >= chars.count || (next2.map { !"AEIOU".contains($0) } ?? true) {
+                        // GH 静音
+                    } else {
+                        result.append("F")
+                    }
+                    i += 1
+                } else if next == "N" && i + 2 >= chars.count {
+                    result.append("K")
+                } else if let n = next, "EIY".contains(n) {
+                    result.append("J")
+                } else {
+                    result.append("K")
+                }
+            case "H":
+                if let p = prev, "AEIOU".contains(p), let n = next, !"AEIOU".contains(n) {
+                    // 跳过
+                } else {
+                    result.append("H")
+                }
+            case "K":
+                if prev != "C" { result.append("K") }
+            case "P":
+                if next == "H" {
+                    result.append("F")
+                    i += 1
+                } else {
+                    result.append("P")
+                }
+            case "Q":
+                result.append("K")
+            case "S":
+                if next == "H" {
+                    result.append("X")
+                    i += 1
+                } else if next == "I", let n2 = next2, "AO".contains(n2) {
+                    result.append("X")
+                } else {
+                    result.append("S")
+                }
+            case "T":
+                if next == "H" {
+                    result.append("0")
+                    i += 1
+                } else if next == "I", let n2 = next2, "AO".contains(n2) {
+                    result.append("X")
+                } else {
+                    result.append("T")
+                }
+            case "V":
+                result.append("F")
+            case "W", "Y":
+                if let n = next, "AEIOU".contains(n) { result.append(ch) }
+            case "X":
+                result.append("KS")
+            case "Z":
+                result.append("S")
+            default:
+                break
+            }
+            i += 1
+        }
+        return result
+    }
+
+    // MARK: - 拼音工具（算法 A）
+
+    /// 中文字串 → 不带声调的拼音（"流式" → "liushi"）；非中文返回 nil
+    static func pinyinKey(_ str: String) -> String? {
+        guard !str.isEmpty else { return nil }
+        // 必须含至少一个 CJK 字
+        guard str.unicodeScalars.contains(where: isCJKScalar) else { return nil }
+        let mutable = NSMutableString(string: str)
+        let mutableCF: CFMutableString = mutable
+        let r1 = CFStringTransform(mutableCF, nil, kCFStringTransformMandarinLatin, false)
+        let r2 = CFStringTransform(mutableCF, nil, kCFStringTransformStripDiacritics, false)
+        guard r1 && r2 else { return nil }
+        let py = (mutable as String)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .filter { $0.isLetter }  // 防 punctuation 串入
+        return py.isEmpty ? nil : py
+    }
+
+    /// CJK Unified Ideographs 主区段（含扩展）
+    private static func isCJKScalar(_ s: Unicode.Scalar) -> Bool {
+        let v = s.value
+        // 主 CJK + 扩展 A
+        return (0x4E00...0x9FFF).contains(v) || (0x3400...0x4DBF).contains(v)
     }
 
     /// ASCII word char = 字母 / 数字（中文不算，便于英文术语两侧紧贴汉字时仍能替换）
@@ -467,12 +1006,15 @@ final class CorrectionDictionary {
 
     private func reset() {
         terms = []
+        termsSet = []
         correctionTerms = []
         corrections = [:]
         sortedErrorKeys = []
         errKeysByFirstChar = [:]
         asciiCorrectionByLength = [:]
+        chinesePinyinIndex = [:]
+        englishPhrasesByTokenCount = [:]
+        metaphoneIndex = [:]
         loadedPath = nil
-        // spell 缓存不清——它只跟系统英文词典相关，跟我们字典内容无关
     }
 }

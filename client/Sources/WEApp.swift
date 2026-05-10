@@ -4,6 +4,18 @@ import SwiftUI
 @main
 struct WEApp {
     static func main() {
+        // Gate 多阈值预览：MK --eval-gate "raw input"
+        if CommandLine.arguments.contains("--eval-gate") {
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task {
+                await GateEval.run()
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
         // 音频裁剪/拼接：MK --trim ... 或 MK --concat ...
         if CommandLine.arguments.contains("--trim") || CommandLine.arguments.contains("--concat") {
             let app = NSApplication.shared

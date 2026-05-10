@@ -59,8 +59,11 @@ final class CorrectionDictionary {
 
     /// Gate V0：permissive 阈值，记录而不改行为
     /// 阈值由 polish.gate_threshold 配（缺省 0.0 = 全接受）；调到 0.5 开始过滤低信心替换
+    /// 调阈值前必须用 `MK --eval-gate "raw"` 预览影响，避免走下坡路
+    var gateThresholdOverride: Double? = nil  // eval 工具用
     private var gateThreshold: Double {
-        (RuntimeConfig.shared.polishConfig["gate_threshold"] as? Double) ?? 0.0
+        if let o = gateThresholdOverride { return o }
+        return (RuntimeConfig.shared.polishConfig["gate_threshold"] as? Double) ?? 0.0
     }
 
     /// Gate 决策：true = 应用替换，false = 拒绝

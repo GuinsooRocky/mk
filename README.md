@@ -4,7 +4,34 @@
 >
 > 端侧 only · 0 联网 · 0 订阅 · 中文为主、英文技术词不被音译。
 
-基于 Apple **SpeechAnalyzer**（macOS 26 新 API）+ 应用层字典纠错。Fork 自 [ambient-voice](https://github.com/Marvinngg/ambient-voice)，重命名 + 重做识别管线。
+## 给谁用
+
+每天在 Claude Code / Cursor / 终端 / Notes / 文档里**重度打字 200+ 条**，手累、想用嘴说但被现有方案劝退过——
+
+- **superwhisper / VoiceInk**：1-2 秒延迟，识别不准，要订阅
+- **macOS 自带 Dictation**：cc 终端注入失败、技术词必音译、中日不能同启
+- **飞书/微信内置语音**：只能在自家 app 用
+
+MK 直接解决这些。
+
+## 做什么 · 不做什么
+
+| 做 | 不做 |
+|---|---|
+| 一句话级 push-to-talk 输入（按住右 Option 说话） | 长录音 / 会议纪要 |
+| 中文为主 + 技术英文混杂（`SwiftUI` / `Node.js` / `event loop` 不被音译） | 全英文段落 |
+| **150ms 落字延迟**（比 superwhisper 快 10 倍）+ 长句**分块流式**每 2s 出一段（菜单 toggle，Notes/文档类用）| 字级实时流（说一字出一字 — SA zh-CN 模型物理上做不到）|
+| 装在 .app 里 **472KB**（比 Notes.app 还小） | 离线 LLM 后处理 |
+| **越用越准**：错字手改一次自动入字典，下次同词不再错 | 跨设备 iCloud 同步学习成果 |
+| 输入到任何 app（cc 终端 / Notes / Safari / 飞书 / 有道云）| iOS / Linux / Windows |
+
+## 三个核心选择，决定了 MK 是什么
+
+**1. 端侧 only**——0 订阅 0 联网，靠 Apple SpeechAnalyzer（macOS 26 自带）。所有数据不出 Mac，零运营成本。
+
+**2. 字典 + 算法层纠错**——不上 LLM。靠**拼音哈希 + 短语 Levenshtein + Metaphone 音相似**三层模糊匹配 + **学习模式**自动入库。"流市/流氏/留时" 全自动归"流式"，无需手维护错音变体。
+
+**3. 按住即用**——不做 ambient（监听背景声音），不做 hotword（喊唤醒词）。**右 Option 按住说话，松开就出**——人体工学最快路径，键盘上能摸到的最大键。
 
 ---
 
@@ -319,6 +346,30 @@ killall MK; open .build/MK.app                       # 重启验证
 ```
 
 调试日志：`tail -f ~/.we/debug.log`
+
+## Gate 阈值调参（高级）
+
+每次字典替换都打 confidence 分（0-1），默认阈值 `0.0` 全接受、只记录 reason 到日志（v0.3 行为不变）。如果想用阈值过滤低信心替换防过度纠错：
+
+```bash
+# 1. 预览升阈值会砍掉哪些纠错（必跑）
+.build/debug/MK --eval-gate "我现在测试流市这个词"
+
+# 2. 看输出的 DELTA ANALYSIS，决定能升到哪个阈值
+# 3. 如果 0.5 没砍合理纠错，编辑 ~/.we/config.json
+{
+  "polish": {
+    "gate_threshold": 0.5
+  }
+}
+
+# 4. 不放心随时回滚（删字段恢复 0.0 默认）
+```
+
+**安全纪律**：
+- 默认永远 0（不在菜单做 toggle，避免误点）
+- 调阈值前必跑 `--eval-gate` 看会砍什么
+- 每次录音的 `[Gate-reject]` 日志都能看到被砍的替换；如果发现合理替换被砍，回去调对应 layer 的 confidence 算法，**不要**直接降阈值兜底
 
 ---
 

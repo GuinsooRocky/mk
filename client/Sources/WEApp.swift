@@ -4,6 +4,18 @@ import SwiftUI
 @main
 struct WEApp {
     static func main() {
+        // 完全卸载：MK --uninstall（清 ~/.we/ + iCloud 同步 + 系统缓存）
+        if CommandLine.arguments.contains("--uninstall") {
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task {
+                await Uninstaller.run()
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
         // Gate 多阈值预览：MK --eval-gate "raw input"
         if CommandLine.arguments.contains("--eval-gate") {
             let app = NSApplication.shared
@@ -229,10 +241,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.log("WE", "App launched, modules: \(moduleManager.moduleNames)")
 
         // 预制领域包：启动完成后异步装（不阻塞 UI）
-        // 缺哪个补哪个，不覆盖用户已修改的版本
+        // 没学过 → bundle 覆盖（拿最新）；学过 → 保留用户版本
+        let hasLearned = (config.polishConfig["learning_happened"] as? Bool) ?? false
         DispatchQueue.global(qos: .background).async {
-            DictPackInstaller.installIfMissing()
-            // 如果有装新的，触发字典 reload 让它生效
+            DictPackInstaller.installIfMissing(hasLearned: hasLearned)
+            // 触发字典 reload 让 bundle 更新生效
             DispatchQueue.main.async {
                 let polish2 = RuntimeConfig.shared.polishConfig
                 if (polish2["context_dictionary_enabled"] as? Bool) ?? false {

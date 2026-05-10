@@ -373,6 +373,36 @@ killall MK; open .build/MK.app                       # 重启验证
 
 ---
 
+## 完全卸载
+
+把 `/Applications/MK.app` 拖废纸篓**只删了 .app**，你的字典 / 学习记录 / 录音 / iCloud 同步残留还在 `~/.we/` 和 `~/Library/...com.lengmo.mk*`。要彻底清干净：
+
+```bash
+# 一键清 — 带提示，输 yes 才执行
+/Applications/MK.app/Contents/MacOS/MK --uninstall
+
+# 不问直接清
+/Applications/MK.app/Contents/MacOS/MK --uninstall --yes
+```
+
+清的内容：
+- `~/.we/`（学习字典 / 配置 / 录音 / 调试日志）
+- `~/Library/Mobile Documents/com~apple~CloudDocs/MK/`（iCloud 同步 learned）
+- `~/Library/Caches/com.lengmo.mk/`
+- `~/Library/HTTPStorages/com.lengmo.mk/`
+
+**不删** `/Applications/MK.app` 本身（自己拖废纸篓，避免误操作）。
+
+## 升级时学习状态保护
+
+`config.json` 里有个 `polish.learning_happened` 开关：
+- **未学过（默认 false）**：升级新版 MK 时，6 领域包**自动从 bundle 覆盖到本地最新**——你拿到我每次 release 改进的字典
+- **学过之后（自动翻 true）**：升级时**保留你本地版本**——你手改过的领域包 / 个人化积累不会被冲掉
+
+第一次成功触发学习模式（自动学到一条错例 OR 手动跑 `MK --learn`）时，flag 自动翻 true，从此你的字典进入"个人化"状态。
+
+---
+
 ## License
 
 MIT

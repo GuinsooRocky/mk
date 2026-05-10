@@ -87,6 +87,7 @@ final class RuntimeConfig {
                         "internet-general": "~/.we/dictionary-domains/internet-general.txt"
                     ],
                     "active_domains": ["ai", "frontend", "backend", "product", "design", "internet-general"],
+                    "learning_happened": false,  // 用户首次触发学习模式后翻 true；DictPackInstaller 据此决定是否覆盖
                     "codebase_scan": [
                         "enabled": false,
                         "roots": ["~/Desktop"],

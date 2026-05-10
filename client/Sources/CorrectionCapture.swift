@@ -143,6 +143,16 @@ final class CorrectionCapture {
             Logger.log("Learn", "found \(pairs.count) pairs, all filtered: \(pairs.prefix(3).map { "\($0.0)→\($0.1)" }.joined(separator: ", "))")
         }
 
+        // 翻 learning_happened flag（一次性，首次成功学到才翻）
+        // 翻了之后 DictPackInstaller 不再用 bundle 覆盖用户改过的领域包
+        if learned > 0 {
+            let already = (RuntimeConfig.shared.polishConfig["learning_happened"] as? Bool) ?? false
+            if !already {
+                RuntimeConfig.shared.setPolishField("learning_happened", value: true)
+                Logger.log("Learn", "learning_happened flag flipped to true (first time learning)")
+            }
+        }
+
         pending = nil
     }
 

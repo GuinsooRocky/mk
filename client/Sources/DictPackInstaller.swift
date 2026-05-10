@@ -1,7 +1,15 @@
 import Foundation
 
 /// 启动时把 .app 内 bundle 的字典领域包复制到 ~/.we/dictionary-domains/
-/// 仅在用户本地缺该文件时复制，不覆盖用户已修改的版本
+///
+/// 行为依赖 `polish.learning_happened` flag（CorrectionCapture / DictionaryLearner 触发翻 true）：
+/// - **flag=false（用户未学过）**：bundle 版本始终覆盖到本地（fresh / update 都拿最新）
+/// - **flag=true（已学过）**：保留用户本地版本（用户改过的领域包 / 自定义内容不丢）
+///
+/// 这样：
+/// - 真正的 fresh user → 装啥用啥，bundle 演进自动同步
+/// - 学过之后的 user → 个人积累被保护，bundle 升级不冲掉
+///
 /// 在后台 queue 跑（纯文件 I/O，不需要 MainActor）
 enum DictPackInstaller {
     /// 6 个预置领域包名（不带 .txt 后缀）
@@ -9,25 +17,30 @@ enum DictPackInstaller {
         "ai", "frontend", "backend", "product", "design", "internet-general"
     ]
 
-    /// 启动时调一次：缺哪个补哪个
-    static func installIfMissing() {
+    /// 启动时调一次：缺哪个补哪个；学过的不动；没学过可被 bundle 覆盖更新
+    /// hasLearned 由 caller 注入（main MainActor 读 RuntimeConfig）
+    static func installIfMissing(hasLearned: Bool) {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let targetDir = "\(homeDir)/.we/dictionary-domains"
 
-        // 确保目标目录存在
         if !FileManager.default.fileExists(atPath: targetDir) {
             try? FileManager.default.createDirectory(atPath: targetDir, withIntermediateDirectories: true)
         }
 
         var installed: [String] = []
+        var refreshed: [String] = []
         var skipped: [String] = []
+
         for name in bundledPacks {
             let targetPath = "\(targetDir)/\(name).txt"
-            if FileManager.default.fileExists(atPath: targetPath) {
+            let exists = FileManager.default.fileExists(atPath: targetPath)
+
+            // 已学过 + 文件存在 → 保护，不动
+            if exists && hasLearned {
                 skipped.append(name)
                 continue
             }
-            // 从 SwiftPM 自动生成的 module bundle 里找 <name>.txt（.process(\"Resources\") 会扁平化）
+
             guard let bundleURL = Bundle.module.url(
                 forResource: name,
                 withExtension: "txt"
@@ -35,22 +48,31 @@ enum DictPackInstaller {
                 Logger.log("DictPack", "bundle missing: \(name).txt")
                 continue
             }
+
             do {
-                try FileManager.default.copyItem(
-                    at: bundleURL,
-                    to: URL(fileURLWithPath: targetPath)
-                )
-                installed.append(name)
+                if exists {
+                    // 没学过 + 文件存在 → 用 bundle 覆盖（fresh user 拿最新）
+                    try FileManager.default.removeItem(atPath: targetPath)
+                    try FileManager.default.copyItem(at: bundleURL, to: URL(fileURLWithPath: targetPath))
+                    refreshed.append(name)
+                } else {
+                    // 文件不存在 → 首次安装
+                    try FileManager.default.copyItem(at: bundleURL, to: URL(fileURLWithPath: targetPath))
+                    installed.append(name)
+                }
             } catch {
                 Logger.log("DictPack", "copy failed \(name): \(error)")
             }
         }
 
         if !installed.isEmpty {
-            Logger.log("DictPack", "installed \(installed.count) bundled packs: \(installed.joined(separator: ", "))")
+            Logger.log("DictPack", "installed \(installed.count) bundled packs (fresh): \(installed.joined(separator: ", "))")
+        }
+        if !refreshed.isEmpty {
+            Logger.log("DictPack", "refreshed \(refreshed.count) packs from bundle (user not learned yet): \(refreshed.joined(separator: ", "))")
         }
         if !skipped.isEmpty {
-            Logger.log("DictPack", "kept user version of \(skipped.count) packs: \(skipped.joined(separator: ", "))")
+            Logger.log("DictPack", "preserved \(skipped.count) user packs (learning_happened=true): \(skipped.joined(separator: ", "))")
         }
     }
 }

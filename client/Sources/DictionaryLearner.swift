@@ -68,6 +68,12 @@ enum DictionaryLearner {
         // reload 字典
         reloadAllDictionaries()
 
+        // 翻 learning_happened flag（首次手动 learn 也算学习发生过）
+        let already = (RuntimeConfig.shared.polishConfig["learning_happened"] as? Bool) ?? false
+        if !already, !alreadyHas {
+            RuntimeConfig.shared.setPolishField("learning_happened", value: true)
+        }
+
         let action = alreadyHas ? "noop (already learned)" : (found ? "appended to existing" : "new entry")
         return "learn ok: \(c) | \(w) → \(action) → \(learnedURL.path)"
     }

@@ -35,13 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.3.0）
+## ⬇️ 直接下载（v0.3.3）
 
-[**📦 MK-v0.3.0.zip → 点击下载**](https://github.com/GuinsooRocky/mike/releases/download/v0.3.0/MK-v0.3.0.zip)
+[**📦 MK-v0.3.3.zip → 点击下载**](https://github.com/GuinsooRocky/mike/releases/download/v0.3.3/MK-v0.3.3.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mike/releases](https://github.com/GuinsooRocky/mike/releases)
 >
-> v0.3.0 vs v0.2.0：包体 13MB → **1.7MB**（-87%）；落字延迟 700ms → **150ms**；新增算法 A/B/C 模糊匹配 + 学习模式 + 分块流式
+> v0.3.3 vs v0.2.0：zip 4.1MB → **505KB**（-88%）；落字延迟 700ms → **150ms**；6 包 1900 词条 + 算法 A/B/C/D 模糊匹配 + L4 升级 join-1-token + 学习模式 + 分块流式
 
 ### 首次安装 3 步（自签 Gatekeeper 绕过）
 

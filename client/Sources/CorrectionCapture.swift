@@ -102,19 +102,41 @@ final class CorrectionCapture {
             return
         }
 
-        // 4) 中文分词 → token 对齐
+        // 4) 三元组 stability 信号：injected vs modifiedSegment 的字符比例
+        // 接近 1.0 = 用户基本保留（small edits = 真纠错）
+        // 远离 1.0 = 大改 / 大删（不是 ASR 错例，是用户改本意，不学）
+        let lenRatio = Double(modifiedSegment.count) / max(1.0, Double(injected.count))
+        guard lenRatio >= 0.5, lenRatio <= 2.0 else {
+            Logger.log("Learn", "skip: length ratio \(String(format: "%.2f", lenRatio)) out of [0.5, 2.0] (probably intent change, not ASR fix)")
+            pending = nil
+            return
+        }
+
+        // 5) 中文分词 → token 对齐
         let oldTokens = chineseTokens(of: injected)
         let newTokens = chineseTokens(of: modifiedSegment)
 
-        // 5) LCS 对齐 → 提取差异 pair
+        // 6) LCS 对齐 → 提取差异 pair
         let pairs = extractPairs(oldTokens: oldTokens, newTokens: newTokens)
 
-        // 6) 过滤 + 学习
+        // 7) 三元组：token 重合比例（共保留多少 token）
+        let oldSet = Set(oldTokens)
+        let newSet = Set(newTokens)
+        let kept = oldSet.intersection(newSet).count
+        let total = max(1, oldSet.union(newSet).count)
+        let keepRatio = Double(kept) / Double(total)
+        guard keepRatio >= 0.4 else {
+            Logger.log("Learn", "skip: keep ratio \(String(format: "%.2f", keepRatio)) too low (kept \(kept)/\(total) tokens, probably full rewrite)")
+            pending = nil
+            return
+        }
+
+        // 8) 过滤 + 学习（带三元组 stability 元数据）
         var learned = 0
         for (wrong, correct) in pairs {
             guard isValidLearnPair(wrong: wrong, correct: correct) else { continue }
             let result = DictionaryLearner.learn(wrong: wrong, correct: correct)
-            Logger.log("Learn", "auto: \(wrong) → \(correct) | \(result)")
+            Logger.log("Learn", "auto[stability=\(String(format: "%.2f", keepRatio))]: \(wrong) → \(correct) | \(result)")
             learned += 1
         }
         if learned == 0, !pairs.isEmpty {

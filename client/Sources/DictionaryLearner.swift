@@ -8,7 +8,13 @@ import Foundation
 /// 幂等：同 `(正字, 错音)` 已存在不重复追加。
 @MainActor
 enum DictionaryLearner {
-    static let learnedURL = WEDataDir.url.appendingPathComponent("correction-dictionary-learned.txt")
+    /// learned 字典写入位置：优先 iCloud Drive（多 Mac 自动同步），fallback 本地
+    static var learnedURL: URL {
+        if let icloud = CorrectionDictionary.iCloudLearnedPath() {
+            return URL(fileURLWithPath: icloud)
+        }
+        return WEDataDir.url.appendingPathComponent("correction-dictionary-learned.txt")
+    }
 
     /// 学习一条 (错音 → 正字) 映射；返回人类可读结果。
     /// 调用后自动 reload 字典（VoicePipeline 下次按热键就生效）。

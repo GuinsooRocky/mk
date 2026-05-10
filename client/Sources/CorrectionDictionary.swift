@@ -57,13 +57,13 @@ final class CorrectionDictionary {
     /// VoicePipeline 用它写 VoiceHistory 做审计；未来 Gate 调参也基于这个
     private(set) var lastCorrections: [CorrectionRecord] = []
 
-    /// Gate V0：permissive 阈值，记录而不改行为
-    /// 阈值由 polish.gate_threshold 配（缺省 0.0 = 全接受）；调到 0.5 开始过滤低信心替换
-    /// 调阈值前必须用 `MK --eval-gate "raw"` 预览影响，避免走下坡路
+    /// Gate V1：默认阈值 0.5（过滤 L2/L4 floor 边界 + L5 弱 metaphone 边界）
+    /// 阈值由 polish.gate_threshold 配；现有 L1=0.95 全留 / L3 ≥0.7 全留 / 只砍最弱的
+    /// 调阈值前用 `MK --eval-gate "raw"` 预览影响
     var gateThresholdOverride: Double? = nil  // eval 工具用
     private var gateThreshold: Double {
         if let o = gateThresholdOverride { return o }
-        return (RuntimeConfig.shared.polishConfig["gate_threshold"] as? Double) ?? 0.0
+        return (RuntimeConfig.shared.polishConfig["gate_threshold"] as? Double) ?? 0.5
     }
 
     /// Gate 决策：true = 应用替换，false = 拒绝
@@ -152,7 +152,8 @@ final class CorrectionDictionary {
     /// 1. `context_dictionary_path` 用户主字典
     /// 2. `context_dictionary_paths` legacy 列表（向后兼容）
     /// 3. `dictionary_domains[name]` 中 `active_domains` 启用的圈子包
-    /// 4. `~/.we/correction-dictionary-learned.txt` learned 字典（如果存在且未被前面包括）
+    /// 4. **iCloud Drive learned 字典（多 Mac 同步）** —— 如果存在
+    /// 5. `~/.we/correction-dictionary-learned.txt` learned 字典（fallback）
     static func resolveEnabledPaths(polish: [String: Any]) -> [String] {
         var paths: [String] = []
         if let p = polish["context_dictionary_path"] as? String, !p.isEmpty {
@@ -169,14 +170,42 @@ final class CorrectionDictionary {
                 }
             }
         }
-        // learned 自动加上（除非用户已显式列）
-        let learned = "~/.we/correction-dictionary-learned.txt"
-        let learnedExpanded = (learned as NSString).expandingTildeInPath
-        let alreadyHas = paths.contains { ($0 as NSString).expandingTildeInPath == learnedExpanded }
-        if !alreadyHas, FileManager.default.fileExists(atPath: learnedExpanded) {
-            paths.append(learned)
+
+        // learned 自动加上 — 优先 iCloud，fallback 本地
+        let icloudLearned = iCloudLearnedPath()
+        let localLearned = "~/.we/correction-dictionary-learned.txt"
+
+        // 加 iCloud（如果存在 + 没被 caller 显式列了）
+        if let icloud = icloudLearned {
+            let alreadyHas = paths.contains { ($0 as NSString).expandingTildeInPath == icloud }
+            if !alreadyHas, FileManager.default.fileExists(atPath: icloud) {
+                paths.append(icloud)
+            }
         }
+
+        // 加本地（同样防重复）
+        let localExpanded = (localLearned as NSString).expandingTildeInPath
+        let alreadyHasLocal = paths.contains { ($0 as NSString).expandingTildeInPath == localExpanded }
+        if !alreadyHasLocal, FileManager.default.fileExists(atPath: localExpanded) {
+            paths.append(localLearned)
+        }
+
         return paths
+    }
+
+    /// iCloud Drive 的 learned 字典路径（如果用户开了 iCloud Drive）
+    /// `~/Library/Mobile Documents/com~apple~CloudDocs/MK/correction-dictionary-learned.txt`
+    /// 返回 nil 表示 iCloud Drive 不可用
+    static func iCloudLearnedPath() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let cloudRoot = "\(home)/Library/Mobile Documents/com~apple~CloudDocs"
+        guard FileManager.default.fileExists(atPath: cloudRoot) else { return nil }
+        let mkDir = "\(cloudRoot)/MK"
+        // 自动 mkdir MK 目录
+        if !FileManager.default.fileExists(atPath: mkDir) {
+            try? FileManager.default.createDirectory(atPath: mkDir, withIntermediateDirectories: true)
+        }
+        return "\(mkDir)/correction-dictionary-learned.txt"
     }
 
     /// 加载多个字典（按顺序合并）

@@ -65,6 +65,9 @@ final class VoiceSession {
     /// 防止 chunk timer 与正在执行的 flushChunk 重入
     private var flushInProgress: Bool = false
 
+    /// stop 已开始 — 阻止后续 flushChunk 触发（防 chunk timer 跟 stop 抢资源 → state 卡死）
+    private var isStopping: Bool = false
+
     /// chunk 定时器 task
     private var chunkTimer: Task<Void, Never>?
 
@@ -91,6 +94,7 @@ final class VoiceSession {
         allWords = []
         cumulativeChunkText = ""
         flushInProgress = false
+        isStopping = false
 
         // 1. 查找最佳中文 locale
         let bestLocale = await findChineseLocale()
@@ -225,8 +229,9 @@ final class VoiceSession {
 
     /// chunk timer 触发：把当前 SA 终结、拿累计文本、原子切换到一个新 SA
     /// 关键：captureDelegate 的 inputBuilder 通过 swapInputBuilder 原子换；音频流不停。
+    /// stop 已开始时立即返回（防 chunk timer 跟 stop 抢资源 → state 卡死）
     private func flushChunk() async {
-        guard isRunning, !flushInProgress else { return }
+        guard isRunning, !isStopping, !flushInProgress else { return }
         flushInProgress = true
         defer { flushInProgress = false }
 
@@ -347,9 +352,21 @@ final class VoiceSession {
             return TranscriptionResult(fullText: "", words: [], audioPath: nil, timestamp: Date())
         }
 
-        // 先停 chunk 定时器，避免 stop 与 flushChunk 同时跑
+        // 先打 stop 标记 + 停 chunk 定时器，避免 stop 与 flushChunk 同时跑
+        // 注意：Task.cancel() 协作式取消，flushChunk 入口会检查 isStopping；这里再等当前 flush 完成（最多 200ms）
+        isStopping = true
         chunkTimer?.cancel()
         chunkTimer = nil
+
+        // 等待可能正在跑的 flushChunk 完成（最多 200ms）
+        var waitMs = 0
+        while flushInProgress && waitMs < 200 {
+            try? await Task.sleep(for: .milliseconds(20))
+            waitMs += 20
+        }
+        if flushInProgress {
+            Logger.log("Voice", "[DIAG] stop: flushChunk still running after 200ms wait, proceeding anyway")
+        }
 
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let bufferCountBefore = captureDelegate?.bufferCount ?? 0

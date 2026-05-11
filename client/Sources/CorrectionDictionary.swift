@@ -1,6 +1,6 @@
 import Foundation
 
-/// 加载 ~/.we/correction-dictionary.{json,txt,md} （多文件合并）
+/// 加载 ~/.mk/correction-dictionary.{json,txt,md} （多文件合并）
 ///
 /// **职责拆开**（避免一份大表跑所有事）：
 /// - **terms** → 注入 SA `contextualStrings`（hint 越多识别越准，硬上限 `maxHintTerms` 默认 800）
@@ -186,7 +186,7 @@ final class CorrectionDictionary {
     /// 2. `context_dictionary_paths` legacy 列表（向后兼容）
     /// 3. `dictionary_domains[name]` 中 `active_domains` 启用的圈子包
     /// 4. **iCloud Drive learned 字典（多 Mac 同步）** —— 如果存在
-    /// 5. `~/.we/correction-dictionary-learned.txt` learned 字典（fallback）
+    /// 5. `~/.mk/correction-dictionary-learned.txt` learned 字典（fallback）
     static func resolveEnabledPaths(polish: [String: Any]) -> [String] {
         var paths: [String] = []
         if let p = polish["context_dictionary_path"] as? String, !p.isEmpty {
@@ -206,7 +206,7 @@ final class CorrectionDictionary {
 
         // learned 自动加上 — 优先 iCloud，fallback 本地
         let icloudLearned = iCloudLearnedPath()
-        let localLearned = "~/.we/correction-dictionary-learned.txt"
+        let localLearned = "~/.mk/correction-dictionary-learned.txt"
 
         // 加 iCloud（如果存在 + 没被 caller 显式列了）
         if let icloud = icloudLearned {

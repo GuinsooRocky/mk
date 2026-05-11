@@ -1,6 +1,6 @@
 import Foundation
 
-/// 运行时配置，从 ~/.we/config.json 加载
+/// 运行时配置，从 ~/.mk/config.json 加载
 /// 支持热更新（文件变更时自动重载）
 @MainActor
 final class RuntimeConfig {
@@ -74,24 +74,24 @@ final class RuntimeConfig {
                 "polish": [
                     "enabled": false,
                     "context_dictionary_enabled": true,
-                    "context_dictionary_path": "~/.we/correction-dictionary.txt",
+                    "context_dictionary_path": "~/.mk/correction-dictionary.txt",
                     "context_ocr_enabled": false,
                     "dict_max_terms": 1500,
                     "dict_max_correction_terms": 500,
                     "dictionary_domains": [
-                        "ai":               "~/.we/dictionary-domains/ai.txt",
-                        "frontend":         "~/.we/dictionary-domains/frontend.txt",
-                        "backend":          "~/.we/dictionary-domains/backend.txt",
-                        "product":          "~/.we/dictionary-domains/product.txt",
-                        "design":           "~/.we/dictionary-domains/design.txt",
-                        "internet-general": "~/.we/dictionary-domains/internet-general.txt"
+                        "ai":               "~/.mk/dictionary-domains/ai.txt",
+                        "frontend":         "~/.mk/dictionary-domains/frontend.txt",
+                        "backend":          "~/.mk/dictionary-domains/backend.txt",
+                        "product":          "~/.mk/dictionary-domains/product.txt",
+                        "design":           "~/.mk/dictionary-domains/design.txt",
+                        "internet-general": "~/.mk/dictionary-domains/internet-general.txt"
                     ],
                     "active_domains": ["ai", "frontend", "backend", "product", "design", "internet-general"],
                     "learning_happened": false,  // 用户首次触发学习模式后翻 true；DictPackInstaller 据此决定是否覆盖
                     "codebase_scan": [
                         "enabled": false,
                         "roots": ["~/Desktop"],
-                        "out_path": "~/.we/correction-dictionary-codebase.txt",
+                        "out_path": "~/.mk/correction-dictionary-codebase.txt",
                         "top": 300,
                         "min_freq": 3
                     ]

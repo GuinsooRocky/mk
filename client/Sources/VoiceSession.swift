@@ -191,7 +191,7 @@ final class VoiceSession {
         session.addInput(deviceInput)
 
         let audioOutput = AVCaptureAudioDataOutput()
-        let captureQueue = DispatchQueue(label: "com.antigravity.we.audio-capture")
+        let captureQueue = DispatchQueue(label: "com.lengmo.mk.audio-capture")
 
         // 创建 delegate，捕获所有需要的局部变量（避免访问 @MainActor 的 self）
         let delegate = AudioCaptureDelegate(

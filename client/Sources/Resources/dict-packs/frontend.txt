@@ -1,6 +1,6 @@
 # MK 领域包：前端 / Frontend
 # 250+ 高频术语，覆盖框架/构建工具/语言特性/状态管理/UI 库
-# 自动复制到 ~/.we/dictionary-domains/frontend.txt
+# 自动复制到 ~/.mk/dictionary-domains/frontend.txt
 
 # === 框架 ===
 React

@@ -2,7 +2,7 @@
 
 ## Git 流程
 
-本项目是单人开发的个人仓（GuinsooRocky/mike），**无 PR review 流程**。
+本项目是单人开发的个人仓（GuinsooRocky/mk），**无 PR review 流程**。
 
 ### 例外：允许同步 feature 分支到 remote main
 

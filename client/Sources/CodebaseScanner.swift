@@ -2,19 +2,19 @@ import Foundation
 
 /// 启动时后台跑 scan-codebase.py 自动生成 codebase 字典。
 ///
-/// 配置（`~/.we/config.json` 的 `polish.codebase_scan`）：
+/// 配置（`~/.mk/config.json` 的 `polish.codebase_scan`）：
 /// ```json
 /// "codebase_scan": {
 ///   "enabled": true,
 ///   "roots": ["~/Desktop/my-code", "~/Desktop/cmm"],
-///   "out_path": "~/.we/correction-dictionary-codebase.txt",
-///   "script_path": "~/.we/scripts/scan-codebase.py",   // 可选；缺省按几个常见位置找
+///   "out_path": "~/.mk/correction-dictionary-codebase.txt",
+///   "script_path": "~/.mk/scripts/scan-codebase.py",   // 可选；缺省按几个常见位置找
 ///   "top": 300,
 ///   "min_freq": 3
 /// }
 /// ```
 ///
-/// 缓存：`~/.we/cache/codebase-scan.meta.json` 记录每个 root 上次扫描时的 mtime。
+/// 缓存：`~/.mk/cache/codebase-scan.meta.json` 记录每个 root 上次扫描时的 mtime。
 /// 任一 root 的 mtime 变了 → 重扫；全部没变 → 直接跳过。
 ///
 /// 全程异步、失败兜底成 log，不阻塞 UI。
@@ -192,7 +192,7 @@ enum CodebaseScanner {
 
     // MARK: - resolve script / python
 
-    /// 优先级：用户配置 → ~/.we/scripts/ → 当前 cwd 旁边 → 仓库源码（开发时）
+    /// 优先级：用户配置 → ~/.mk/scripts/ → 当前 cwd 旁边 → 仓库源码（开发时）
     private static func resolveScriptPath(override: String?) -> String? {
         let fm = FileManager.default
         if let o = override {
@@ -200,7 +200,7 @@ enum CodebaseScanner {
             if fm.fileExists(atPath: p) { return p }
         }
         let candidates: [String] = [
-            (NSHomeDirectory() as NSString).appendingPathComponent(".we/scripts/scan-codebase.py"),
+            (NSHomeDirectory() as NSString).appendingPathComponent(".mk/scripts/scan-codebase.py"),
             (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent("client/scripts/scan-codebase.py"),
             (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent("scripts/scan-codebase.py")
         ]

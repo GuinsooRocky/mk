@@ -1,6 +1,6 @@
 # MK 领域包：设计 / Design
 # 150+ 高频术语，覆盖工具/排版/色彩/系统/可访问性
-# 自动复制到 ~/.we/dictionary-domains/design.txt
+# 自动复制到 ~/.mk/dictionary-domains/design.txt
 
 # === 工具 ===
 Figma

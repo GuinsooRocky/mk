@@ -1,4 +1,4 @@
-# Mike — macOS 语音输入 PRD
+# MK — macOS 语音输入 PRD
 
 > 版本 v0.1 · 起草日期 2026-05-08 · 状态 草稿（待 grill）
 
@@ -29,7 +29,7 @@
 2. **中日不能同启**：Dictation 一次会话只能识别一种语言，要切换得手动点麦克风旁的语言图标。本机当前只下载了 `en-US` + `zh-CN`，**`ja-JP` 未安装**。
 3. **无自定义词典**：自定义词汇是 Voice Control 独占功能，Dictation 没有。SwiftUI / SpeechAnalyzer / Tauri / Groq 这些技术词在中文模型下必被音译。
 
-**Mike 自写路径不撞墙的原因**：Mike 用 NSPasteboard 写剪贴板 + CGEvent 模拟 ⌘V 按键，**走按键事件路径**而非 NSTextInputContext，raw-mode TUI 会正常接收按键 → 能成功注入 cc 输入框。这是 Mike 与 Dictation 的根本架构差异，也是项目存在的核心理由。
+**MK 自写路径不撞墙的原因**：MK 用 NSPasteboard 写剪贴板 + CGEvent 模拟 ⌘V 按键，**走按键事件路径**而非 NSTextInputContext，raw-mode TUI 会正常接收按键 → 能成功注入 cc 输入框。这是 MK 与 Dictation 的根本架构差异，也是项目存在的核心理由。
 
 ---
 
@@ -192,7 +192,7 @@
 
 | ID | 问题 |
 |---|---|
-| ~~TBD-1~~ | **[已决 2026-05-08]** Dictation 三道结构性墙不可用：(1) Claude Code Ink raw-mode 终端注入失败 (2) 中日不能同启 (3) 无自定义词典让技术词被音译。详见 §1.3。Mike 走 NSPasteboard + CGEvent 路径绕开 raw-mode 墙。 |
+| ~~TBD-1~~ | **[已决 2026-05-08]** Dictation 三道结构性墙不可用：(1) Claude Code Ink raw-mode 终端注入失败 (2) 中日不能同启 (3) 无自定义词典让技术词被音译。详见 §1.3。MK 走 NSPasteboard + CGEvent 路径绕开 raw-mode 墙。 |
 | TBD-2 | 是否需要支持多台 Mac？同步怎么做？|
 | ~~TBD-3~~ | **[已决 2026-05-08：推迟]** MVP 不做任何符号 / 编辑规则，原样注入识别结果。Phase 2 再视使用痛点决定。|
 | TBD-4 | 全局快捷键默认绑哪个？|

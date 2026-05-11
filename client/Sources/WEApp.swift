@@ -4,7 +4,7 @@ import SwiftUI
 @main
 struct WEApp {
     static func main() {
-        // 完全卸载：MK --uninstall（清 ~/.we/ + iCloud 同步 + 系统缓存）
+        // 完全卸载：MK --uninstall（清 ~/.mk/ + iCloud 同步 + 系统缓存）
         if CommandLine.arguments.contains("--uninstall") {
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
@@ -41,7 +41,7 @@ struct WEApp {
         }
 
         // 错例反馈学习：MK --learn "错音" "正字"
-        // 追加到 ~/.we/correction-dictionary-learned.txt + reload；幂等（同条不重复）
+        // 追加到 ~/.mk/correction-dictionary-learned.txt + reload；幂等（同条不重复）
         if let idx = CommandLine.arguments.firstIndex(of: "--learn"),
            idx + 2 < CommandLine.arguments.count {
             let wrong = CommandLine.arguments[idx + 1]

@@ -1,6 +1,6 @@
 # MK 领域包：互联网通用 / Internet General
 # 200+ 高频术语，覆盖网络协议/Web 基础/Git/Shell/IDE/AI 通用
-# 自动复制到 ~/.we/dictionary-domains/internet-general.txt
+# 自动复制到 ~/.mk/dictionary-domains/internet-general.txt
 
 # === 通用缩写 ===
 API

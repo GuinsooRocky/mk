@@ -96,7 +96,7 @@ enum GateEval {
         print("HOW TO USE")
         print("================================================================")
         print("看上面 DELTA — 找到第一个砍掉合理纠错的阈值边界，那是你的上限。")
-        print("调阈值：编辑 ~/.we/config.json 加 \"polish\": { \"gate_threshold\": 0.X }")
+        print("调阈值：编辑 ~/.mk/config.json 加 \"polish\": { \"gate_threshold\": 0.X }")
         print("回滚：删掉 gate_threshold 字段，行为恢复 v0.3 默认（threshold=0）")
     }
 }

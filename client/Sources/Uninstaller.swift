@@ -6,7 +6,7 @@ import Foundation
 /// 用法：`MK --uninstall`（带提示）/ `MK --uninstall --yes`（不问直接删）
 ///
 /// 删的内容：
-/// - `~/.we/`（学习记录 / 字典 / 配置 / 录音 / 调试日志）
+/// - `~/.mk/`（学习记录 / 字典 / 配置 / 录音 / 调试日志）
 /// - `~/Library/Mobile Documents/com~apple~CloudDocs/MK/`（iCloud Drive 同步的 learned）
 /// - `~/Library/Caches/com.lengmo.mk/`（系统给 .app 的运行时缓存）
 /// - `~/Library/HTTPStorages/com.lengmo.mk/`
@@ -21,7 +21,7 @@ enum Uninstaller {
 
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let targets: [(String, String)] = [
-            ("~/.we/",                                              "\(homeDir)/.we"),
+            ("~/.mk/",                                              "\(homeDir)/.mk"),
             ("~/Library/Mobile Documents/com~apple~CloudDocs/MK/",  "\(homeDir)/Library/Mobile Documents/com~apple~CloudDocs/MK"),
             ("~/Library/Caches/com.lengmo.mk/",                     "\(homeDir)/Library/Caches/com.lengmo.mk"),
             ("~/Library/HTTPStorages/com.lengmo.mk/",               "\(homeDir)/Library/HTTPStorages/com.lengmo.mk")

@@ -2,7 +2,7 @@ import Foundation
 
 /// 错例反馈学习：把"用户实际说错过的词"沉淀到 learned 字典。
 ///
-/// 写入 `~/.we/correction-dictionary-learned.txt`，格式与现有 `.txt` 字典一致：
+/// 写入 `~/.mk/correction-dictionary-learned.txt`，格式与现有 `.txt` 字典一致：
 ///   `正字 | 错音1 | 错音2`
 ///
 /// 幂等：同 `(正字, 错音)` 已存在不重复追加。

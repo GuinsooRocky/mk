@@ -1,11 +1,11 @@
 #!/bin/bash
-# 同步 ~/.we/ 数据到训练服务器 + 运行 Gemini 蒸馏
-# 配置从 ~/.we/config.json 读取（distill + sync 段）
+# 同步 ~/.mk/ 数据到训练服务器 + 运行 Gemini 蒸馏
+# 配置从 ~/.mk/config.json 读取（distill + sync 段）
 # 由 launchd 监听文件变化自动触发，也可手动执行: make sync
 
 set -euo pipefail
 
-LOCAL_DIR="$HOME/.we"
+LOCAL_DIR="$HOME/.mk"
 CONFIG="$LOCAL_DIR/config.json"
 LOG="$LOCAL_DIR/sync.log"
 DISTILL_SCRIPT="$(dirname "$0")/../../server/gen_distill_gemini.py"

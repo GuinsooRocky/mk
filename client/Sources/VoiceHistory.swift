@@ -1,7 +1,7 @@
 import Foundation
 
 /// 每次语音会话的历史记录
-/// 写入 ~/.we/voice-history.jsonl
+/// 写入 ~/.mk/voice-history.jsonl
 /// 蒸馏流水线从此文件读取训练数据
 struct VoiceHistoryEntry: Codable {
     let timestamp: Date

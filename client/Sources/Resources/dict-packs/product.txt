@@ -1,6 +1,6 @@
 # MK 领域包：产品 / Product
 # 150+ 高频术语，覆盖文档/指标/方法论/敏捷/增长
-# 自动复制到 ~/.we/dictionary-domains/product.txt
+# 自动复制到 ~/.mk/dictionary-domains/product.txt
 
 # === 文档类型 ===
 PRD

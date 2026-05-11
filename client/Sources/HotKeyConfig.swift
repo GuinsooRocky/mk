@@ -7,7 +7,7 @@ import CoreGraphics
 /// 1. modifier-only（如 Right Option 单独按下）：keyCode 是 modifier 键码（61=右 option 等），modifiers 为空
 /// 2. 组合键（如 Cmd+Shift+R）：keyCode 是字母/数字键码，modifiers 是 modifier 标志位集合
 ///
-/// 存储格式（JSON in ~/.we/config.json）：
+/// 存储格式（JSON in ~/.mk/config.json）：
 /// ```json
 /// "hotkey": {
 ///   "keyCode": 61,

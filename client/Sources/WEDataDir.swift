@@ -1,9 +1,9 @@
 import Foundation
 
-/// ~/.we/ 数据目录管理
+/// ~/.mk/ 数据目录管理
 enum WEDataDir {
     static let url: URL = {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".we")
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".mk")
     }()
 
     static func ensureExists() {
@@ -18,6 +18,6 @@ enum WEDataDir {
                 try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
             }
         }
-        Logger.log("DataDir", "Ensured ~/.we/ structure exists")
+        Logger.log("DataDir", "Ensured ~/.mk/ structure exists")
     }
 }

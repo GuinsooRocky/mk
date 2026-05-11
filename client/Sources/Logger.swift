@@ -1,6 +1,6 @@
 import Foundation
 
-/// 简单日志，写入 ~/.we/debug.log + 控制台
+/// 简单日志，写入 ~/.mk/debug.log + 控制台
 /// 超过 maxSize 时自动截断保留最近一半
 enum Logger {
     private static let logURL = WEDataDir.url.appendingPathComponent("debug.log")

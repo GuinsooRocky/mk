@@ -1,6 +1,6 @@
 # MK 领域包：后端 / Backend
 # 250+ 高频术语，覆盖云/容器/数据库/消息/中间件/语言
-# 自动复制到 ~/.we/dictionary-domains/backend.txt
+# 自动复制到 ~/.mk/dictionary-domains/backend.txt
 
 # === 容器 / 编排 ===
 Kubernetes

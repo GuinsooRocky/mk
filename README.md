@@ -35,11 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.3.5）
+## ⬇️ 直接下载（v0.3.6）
 
-[**📦 MK-v0.3.5.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.3.5/MK-v0.3.5.zip)
+[**📦 MK-v0.3.6.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.3.6/MK-v0.3.6.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
+>
+> v0.3.6 修复：说"空格 / 回车 / 换行"后残留尾标点（SA 自动追加的 `。`）
 >
 > v0.3.5 vs v0.2.0：zip 4.1MB → **371KB**（-91%）；落字延迟 700ms → **150ms**；6 包 1900 词条 + 算法 A/B/C/D + L4 升级 + 学习模式 + 分块流式 + 卸载干净
 

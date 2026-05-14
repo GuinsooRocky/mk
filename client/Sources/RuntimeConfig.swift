@@ -117,7 +117,8 @@ final class RuntimeConfig {
                     "keyCode": 61,
                     "modifierFlags": 0,
                     "isModifierOnly": true,
-                    "displayName": "Right Option"
+                    "displayName": "Right Option",
+                    "app_blocklist": ["com.tencent.xinWeChat"]
                 ]
             ]
             values = defaults

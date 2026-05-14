@@ -32,15 +32,12 @@ enum PunctuationNormalizer {
         // 中文字符在 Swift Character.isLetter 里是 true，所以 "杠杠" 这种连续不会被替换。
         ("杠。", "-"), ("杠，", "-"), ("杠！", "-"), ("杠？", "-"), ("杠", "-"),
         ("感叹号", "！"),
-        ("左括号", "（"),
-        ("右括号", "）"),
-        ("反括号", "）"),
+        // 注：左括号/右括号/反括号/括号 全部移交 smartParens 智能处理（栈式配对 + 半角输出）
         ("分号", "；"),
         ("冒号", "："),
         ("问号", "？"),
         ("逗号", "，"),
         ("句号", "。"),
-        ("括号", "（"),       // 兜底，仅在 left/right 未匹配时
     ]
 
     /// 不要边界检查，全文匹配的"硬替换"规则
@@ -61,11 +58,13 @@ enum PunctuationNormalizer {
     }
 
     /// 应用 normalize，返回处理后的字符串
-    /// - 严格规则：仅替换满足"独立 token"条件的 source
+    /// - 0. smartParens：栈式配对处理所有 "[左/右/反/又/U/...]括号" 字眼，输出半角 ( )
+    /// - 严格规则：仅替换满足"独立 token"条件的 source（不再含括号类规则）
     /// - unboundedRules：不管边界，全文搜索替换
     static func apply(_ text: String) -> String {
-        var result = text
         var hits: [String] = []
+        // 0. 智能括号配对——见 smartParens 详注
+        var result = smartParens(in: text, hits: &hits)
         for (source, target) in rules {
             // 重复扫直到找不到独立 token 形式的 source
             while let range = findIsolatedRange(of: source, in: result) {
@@ -131,6 +130,148 @@ enum PunctuationNormalizer {
         }
         return false
     }
+
+    /// 智能括号：所有"括号"字眼按栈奇偶配对，输出半角 ( )
+    ///
+    /// Why: 中文连续语流 + Apple SA 错识别"左/右"为"又/U/啊"等同音字，让命令式 "左括号/右括号"
+    ///      规则在用户实际使用时极不稳定。统一改成"只认'括号'两字 + 栈状态"。
+    ///
+    /// 规则：
+    /// - 文本里已有的 `(`/`（`/`)`/`）` 字符照常进出栈，参与判断
+    /// - 遇到"括号"两字：
+    ///     - 前一个字是"左"     → 强制开 `(`，吃掉"左"前缀
+    ///     - 前一个字是"右/反"    → 强制闭 `)`，吃掉前缀
+    ///     - 其他前缀（"又/U/啊"等同音误识别）或无前缀 → 按栈奇偶：栈空开 `(`，栈非空闭 `)`
+    /// - 输出始终半角，方便代码场景
+    ///
+    /// How to apply: 在 strict rules 之前调用，避免与"括号"兜底冲突（兜底已删）
+    private struct BracketKind {
+        let opener: Character
+        let closer: Character
+    }
+
+    private static let roundKind  = BracketKind(opener: "(", closer: ")")
+    private static let squareKind = BracketKind(opener: "[", closer: "]")
+    private static let curlyKind  = BracketKind(opener: "{", closer: "}")
+    private static let angleKind  = BracketKind(opener: "<", closer: ">")
+
+    /// modifier 字 → 括号种类
+    /// 中/方 → 方括号 []，大/花 → 花括号 {}，尖 → 尖括号 <>
+    private static let modifierMap: [Character: BracketKind] = [
+        "中": squareKind, "方": squareKind,
+        "大": curlyKind,  "花": curlyKind,
+        "尖": angleKind,
+    ]
+
+    /// "括"字的常见 ASR 同音/近音误识别集合
+    /// Why: Apple SA 把"括"(kuò) 频繁错为 国/火/惑/扩/后/阔/廓 — 日志里能看见 alt 候选其实有"括"，
+    ///      但默认输出了同音字。我们在 normalize 层兜底，让任何同音字 + "号" 都当 bracket 处理。
+    private static let kuoChars: Set<Character> = ["括", "国", "火", "惑", "扩", "后", "阔", "廓"]
+
+    /// 识别既有的括号字符；入栈用于无 prefix 时判断开/闭
+    private static func isOpenerChar(_ ch: Character) -> Bool {
+        ch == "(" || ch == "（" || ch == "[" || ch == "【" || ch == "{" || ch == "<"
+    }
+    private static func isCloserChar(_ ch: Character) -> Bool {
+        ch == ")" || ch == "）" || ch == "]" || ch == "】" || ch == "}" || ch == ">"
+    }
+
+    private static func smartParens(in text: String, hits: inout [String]) -> String {
+        // 任何 kuoChars 字 + 文本里有"号" 才值得进算法体扫一遍
+        guard text.contains(where: { kuoChars.contains($0) }), text.contains("号") else { return text }
+        var chars = Array(text)
+        var stack: [Character] = []  // 只用空/非空状态
+        var changed = 0
+        var i = 0
+        while i < chars.count {
+            let ch = chars[i]
+            if isOpenerChar(ch) {
+                stack.append(ch)
+                i += 1
+                continue
+            }
+            if isCloserChar(ch) {
+                if !stack.isEmpty { stack.removeLast() }
+                i += 1
+                continue
+            }
+            if kuoChars.contains(ch) {
+                // 向后跳 filler 找"号"
+                var j = i + 1
+                while j < chars.count && isFiller(chars[j]) { j += 1 }
+                guard j < chars.count && chars[j] == "号" else {
+                    i += 1
+                    continue
+                }
+                // 向左跳 filler 找 prev1（可能是 modifier 或 left/right 前缀）
+                var leftBound = i
+                var kind = roundKind
+                var commandIsLeft = false
+                var commandIsRight = false
+                var k = i - 1
+                while k >= 0 && isFiller(chars[k]) { k -= 1 }
+                if k >= 0 {
+                    if let m = modifierMap[chars[k]] {
+                        // 命中 modifier，先吞 modifier，再回看 left/right
+                        kind = m
+                        leftBound = k
+                        var k2 = k - 1
+                        while k2 >= 0 && isFiller(chars[k2]) { k2 -= 1 }
+                        if k2 >= 0 {
+                            if leftPrefixChars.contains(chars[k2]) {
+                                commandIsLeft = true
+                                leftBound = k2
+                            } else if rightPrefixChars.contains(chars[k2]) {
+                                commandIsRight = true
+                                leftBound = k2
+                            }
+                        }
+                    } else if leftPrefixChars.contains(chars[k]) {
+                        commandIsLeft = true
+                        leftBound = k
+                    } else if rightPrefixChars.contains(chars[k]) {
+                        commandIsRight = true
+                        leftBound = k
+                    }
+                }
+                let shouldOpen: Bool
+                if commandIsLeft {
+                    shouldOpen = true
+                } else if commandIsRight {
+                    shouldOpen = false
+                } else {
+                    shouldOpen = stack.isEmpty
+                }
+                let symbol = shouldOpen ? kind.opener : kind.closer
+                chars.replaceSubrange(leftBound..<(j + 1), with: [symbol])
+                if shouldOpen {
+                    stack.append(symbol)
+                } else if !stack.isEmpty {
+                    stack.removeLast()
+                }
+                changed += 1
+                i = leftBound + 1
+                continue
+            }
+            i += 1
+        }
+        if changed > 0 {
+            hits.append("智能括号×\(changed)")
+        }
+        return String(chars)
+    }
+
+    /// 命令字与"括号"两字间允许出现的"填充"字符（ASR token 边界产物）
+    private static func isFiller(_ ch: Character) -> Bool {
+        ch == " " || ch == "\t" || ch == "。" || ch == "，" || ch == "！" || ch == "？" || ch == "；" || ch == "："
+    }
+
+    /// Left bracket 命令前缀：包含"左"及其常见同音误识别（"左"拼音 zuǒ，相对没什么同音字）
+    private static let leftPrefixChars: Set<Character> = ["左"]
+
+    /// Right bracket 命令前缀：包含"右"及其常见同音误识别字
+    /// Why: Apple SA 把"右"(yòu) 经常识别成 又/诱/幼/佑/釉，日志里能看见"括"才是真正想要的 alt
+    private static let rightPrefixChars: Set<Character> = ["右", "又", "诱", "幼", "佑", "釉", "反"]
 
     /// 找一个"独立 token"形式的 source 在 text 里的 range；找不到返回 nil
     /// 独立 = 左侧字符不是 wordChar，右侧字符也不是 wordChar（边界视为非 wordChar）

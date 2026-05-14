@@ -85,7 +85,8 @@ final class HotKeySettingsViewModel {
 
     func save() {
         guard let c = captured else { return }
-        onSave?(c)
+        // recorder 录入只产 keyCode/modifiers/displayName，blocklist 沿用当前 config
+        onSave?(c.with(appBlocklist: current.appBlocklist))
     }
 
     func cancel() {

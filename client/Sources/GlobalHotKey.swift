@@ -22,12 +22,29 @@ final class GlobalHotKey: @unchecked Sendable {
     /// 当前生效的配置（nonisolated 是因为 callback 在非 actor 上下文读它）
     fileprivate nonisolated(unsafe) var currentConfig: HotKeyConfig = .default
 
+    /// 缓存的前台 app bundle id，CGEventTap callback 在非 main thread 读它
+    /// Why: NSWorkspace.shared.frontmostApplication 是 main-thread-only，不能在 tap callback 里直接读
+    /// How to apply: 由 NSWorkspace.didActivateApplicationNotification 在 main 上更新（见 start()）
+    private nonisolated(unsafe) var cachedFrontmostBundle: String?
+    private nonisolated(unsafe) var frontmostObserver: Any?
+
     @MainActor
     func start() {
         // 启动时从 config 读
         let dict = RuntimeConfig.shared.hotKeyConfig
         currentConfig = HotKeyConfig.load(from: dict)
-        Logger.log("HotKey", "Loaded hotkey: \(currentConfig.displayName) (keyCode=\(currentConfig.keyCode), modifierOnly=\(currentConfig.isModifierOnly))")
+        Logger.log("HotKey", "Loaded hotkey: \(currentConfig.displayName) (keyCode=\(currentConfig.keyCode), modifierOnly=\(currentConfig.isModifierOnly), blocklist=\(currentConfig.appBlocklist))")
+
+        // 监听前台 app 切换；callback 在 main 上跑，安全更新 cachedFrontmostBundle
+        cachedFrontmostBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            self?.cachedFrontmostBundle = app?.bundleIdentifier
+        }
 
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
@@ -55,6 +72,10 @@ final class GlobalHotKey: @unchecked Sendable {
 
     @MainActor
     func stop() {
+        if let obs = frontmostObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+            frontmostObserver = nil
+        }
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -63,6 +84,14 @@ final class GlobalHotKey: @unchecked Sendable {
         }
         eventTap = nil
         runLoopSource = nil
+    }
+
+    /// 前台 app 在当前 blocklist 里？
+    /// Why: 微信"按住说话"也吃 Option，MK 不让出去会同时录两份
+    /// How to apply: press 路径调用；release 路径不调用——避免 press 已起来但 release 被吞造成 PTT 状态泄漏
+    fileprivate func isFrontmostBlocked(_ blocklist: [String]) -> Bool {
+        guard !blocklist.isEmpty, let bundle = cachedFrontmostBundle else { return false }
+        return blocklist.contains(bundle)
     }
 
     /// 热更新配置（保存设置后调用）
@@ -85,6 +114,11 @@ final class GlobalHotKey: @unchecked Sendable {
             .intersection(.deviceIndependentFlagsMask)
         guard cfgMods == evtMods else { return }
 
+        if isFrontmostBlocked(cfg.appBlocklist) {
+            Logger.log("HotKey", "\(cfg.displayName) DOWN suppressed (frontmost=\(cachedFrontmostBundle ?? "?") in blocklist)")
+            return
+        }
+
         Logger.log("HotKey", "\(cfg.displayName) DOWN")
         if let onPress {
             DispatchQueue.main.async { onPress() }
@@ -100,6 +134,12 @@ final class GlobalHotKey: @unchecked Sendable {
         let modDown = isModifierDown(for: cfg.keyCode, in: flags)
 
         if modDown && !isPressed {
+            // 拦截仅在 press 边沿；release 路径（!modDown && isPressed）不拦，
+            // 保证已起来的 PTT 一定有配对 release，避免按住时切窗导致状态泄漏
+            if isFrontmostBlocked(cfg.appBlocklist) {
+                Logger.log("HotKey", "\(cfg.displayName) DOWN suppressed (frontmost=\(cachedFrontmostBundle ?? "?") in blocklist)")
+                return
+            }
             isPressed = true
             Logger.log("HotKey", "\(cfg.displayName) DOWN")
             if let onPress {

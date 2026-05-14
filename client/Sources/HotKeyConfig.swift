@@ -13,7 +13,8 @@ import CoreGraphics
 ///   "keyCode": 61,
 ///   "modifierFlags": 0,         // NSEvent.ModifierFlags.rawValue
 ///   "isModifierOnly": true,
-///   "displayName": "Right Option"
+///   "displayName": "Right Option",
+///   "app_blocklist": ["com.tencent.xinWeChat"]  // 这些 app 在前台时热键失效
 /// }
 /// ```
 struct HotKeyConfig: Codable, Equatable, Sendable {
@@ -22,13 +23,42 @@ struct HotKeyConfig: Codable, Equatable, Sendable {
     let modifierFlags: UInt
     let isModifierOnly: Bool
     let displayName: String
+    /// 这些 bundle id 在前台时热键短路，让对方 app 自己消化按键
+    /// Why: 微信 macOS 客户端"按住说话"也是 Option，撞键时 MK 会把语音文本流式注入聊天框
+    let appBlocklist: [String]
+
+    init(
+        keyCode: UInt16,
+        modifierFlags: UInt,
+        isModifierOnly: Bool,
+        displayName: String,
+        appBlocklist: [String] = []
+    ) {
+        self.keyCode = keyCode
+        self.modifierFlags = modifierFlags
+        self.isModifierOnly = isModifierOnly
+        self.displayName = displayName
+        self.appBlocklist = appBlocklist
+    }
 
     static let `default` = HotKeyConfig(
         keyCode: 61,           // Right Option
         modifierFlags: 0,
         isModifierOnly: true,
-        displayName: "Right Option"
+        displayName: "Right Option",
+        appBlocklist: ["com.tencent.xinWeChat"]
     )
+
+    /// 复制时换 appBlocklist（GUI 改键时保留老 blocklist 用）
+    func with(appBlocklist: [String]) -> HotKeyConfig {
+        HotKeyConfig(
+            keyCode: keyCode,
+            modifierFlags: modifierFlags,
+            isModifierOnly: isModifierOnly,
+            displayName: displayName,
+            appBlocklist: appBlocklist
+        )
+    }
 
     /// 从 RuntimeConfig 读取，失败返回默认
     static func load(from dict: [String: Any]) -> HotKeyConfig {
@@ -38,11 +68,13 @@ struct HotKeyConfig: Codable, Equatable, Sendable {
         let modifierFlags = (dict["modifierFlags"] as? Int).map { UInt($0) } ?? 0
         let isModifierOnly = dict["isModifierOnly"] as? Bool ?? false
         let displayName = dict["displayName"] as? String ?? "Unknown"
+        let appBlocklist = (dict["app_blocklist"] as? [String]) ?? []
         return HotKeyConfig(
             keyCode: UInt16(keyCode),
             modifierFlags: modifierFlags,
             isModifierOnly: isModifierOnly,
-            displayName: displayName
+            displayName: displayName,
+            appBlocklist: appBlocklist
         )
     }
 
@@ -52,7 +84,8 @@ struct HotKeyConfig: Codable, Equatable, Sendable {
             "keyCode": Int(keyCode),
             "modifierFlags": Int(modifierFlags),
             "isModifierOnly": isModifierOnly,
-            "displayName": displayName
+            "displayName": displayName,
+            "app_blocklist": appBlocklist
         ]
     }
 

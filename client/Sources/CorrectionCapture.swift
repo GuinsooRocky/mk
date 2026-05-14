@@ -22,6 +22,20 @@ import ApplicationServices
 final class CorrectionCapture {
     static let shared = CorrectionCapture()
 
+    /// terminal app — 走 cc hook 上报路径：写 ~/.mk/pending-learn-prompt.json，
+    /// 让 UserPromptSubmit hook 在 MK 注入的 prompt 里附加约定，Stop hook 扫 <learn> tag
+    /// 落字典。绕开 terminal raw mode 下 AX 读不到 injected 的硬限。
+    private static let terminalBundles: Set<String> = [
+        "com.googlecode.iterm2",
+        "com.apple.Terminal",
+        "dev.warp.Warp-Stable",
+    ]
+
+    /// 已知 AX 不可靠且非 terminal 的 app — 直接 skip（微信 textfield 不暴露 AX content）
+    private static let axUnreliableBundles: Set<String> = [
+        "com.tencent.xinWeChat",
+    ]
+
     private struct Pending {
         let injected: String
         let app: AppIdentity?
@@ -41,6 +55,23 @@ final class CorrectionCapture {
         let polish = RuntimeConfig.shared.polishConfig
         let enabled = (polish["learning_enabled"] as? Bool) ?? true
         guard enabled, !injected.isEmpty else {
+            pending = nil
+            return
+        }
+
+        let bid = targetApp?.bundleID ?? ""
+
+        // terminal → 走 cc hook 上报路径（不调 AX，让 cc 自己上报 <learn> tag）
+        if Self.terminalBundles.contains(bid) {
+            Self.writePendingLearnPrompt(injected: injected, targetApp: bid)
+            Logger.log("Learn", "ccHookPath: wrote pending-learn-prompt for \(bid) (\(injected.count) chars)")
+            pending = nil
+            return
+        }
+
+        // 已知 AX 不可靠的 app → skip
+        if Self.axUnreliableBundles.contains(bid) {
+            Logger.log("Learn", "skip: \(bid) AX unreliable")
             pending = nil
             return
         }
@@ -281,19 +312,64 @@ final class CorrectionCapture {
     // MARK: - 过滤
 
     /// 一对 (wrong, correct) 是否值得入字典
-    /// 严格规则：长度 2-5 字 + Levenshtein 距离 ≤2 + 长度比 0.5-2x + 都不空
+    /// 规则：长度 2-12 字 + 长度比 0.5-2x + 同字符集时 Levenshtein ≤2（跨字符集音译靠 segment 层的 lenRatio/keepRatio 兜底）
     private func isValidLearnPair(wrong: String, correct: String) -> Bool {
         guard !wrong.isEmpty, !correct.isEmpty, wrong != correct else { return false }
         let wLen = wrong.count
         let cLen = correct.count
-        // 长度范围
-        guard wLen >= 2, wLen <= 5, cLen >= 2, cLen <= 5 else { return false }
+        // 长度范围 — 提到 12 字覆盖 PostgreSQL / WebSocket / ambient-voice 这类长词
+        guard wLen >= 2, wLen <= 12, cLen >= 2, cLen <= 12 else { return false }
         // 长度比
         let ratio = Double(wLen) / Double(cLen)
         guard ratio >= 0.5, ratio <= 2.0 else { return false }
-        // Levenshtein
-        let dist = CorrectionDictionary.levenshtein(wrong, correct)
-        guard dist <= 2 else { return false }
+        // Levenshtein 仅在同字符集时检查 — 中文音译 ↔ 英文原词（"飞哥妈" ↔ "Figma"）距离恒 ≥ 字符数，
+        // 永远过不了，所以跨字符集直接旁路，靠 runDiff 里的 keepRatio≥0.4 + lenRatio∈[0.5,2.0] 兜底
+        if !isCrossScript(wrong, correct) {
+            let dist = CorrectionDictionary.levenshtein(wrong, correct)
+            guard dist <= 2 else { return false }
+        }
         return true
+    }
+
+    /// 一边全 CJK 一边全 ASCII letter → 视为跨字符集音译对
+    private func isCrossScript(_ a: String, _ b: String) -> Bool {
+        let aCJK = isAllCJK(a)
+        let bCJK = isAllCJK(b)
+        let aLat = isAllAsciiLetter(a)
+        let bLat = isAllAsciiLetter(b)
+        return (aCJK && bLat) || (bCJK && aLat)
+    }
+
+    private func isAllCJK(_ s: String) -> Bool {
+        guard !s.isEmpty else { return false }
+        return s.unicodeScalars.allSatisfy { scalar in
+            let v = scalar.value
+            // 主要 CJK 区段：基本 + 扩展 A
+            return (0x4E00...0x9FFF).contains(v) || (0x3400...0x4DBF).contains(v)
+        }
+    }
+
+    private func isAllAsciiLetter(_ s: String) -> Bool {
+        guard !s.isEmpty else { return false }
+        return s.unicodeScalars.allSatisfy { scalar in
+            let v = scalar.value
+            return (0x41...0x5A).contains(v) || (0x61...0x7A).contains(v)
+        }
+    }
+
+    // MARK: - cc hook 上报路径
+
+    /// 写 ~/.mk/pending-learn-prompt.json，让 UserPromptSubmit hook 检测到 MK 注入
+    /// 30s TTL 由 hook 端校验；过期或文件不存在时 hook 完全 passthrough，不影响 cc
+    nonisolated private static func writePendingLearnPrompt(injected: String, targetApp: String) {
+        let path = WEDataDir.url.appendingPathComponent("pending-learn-prompt.json")
+        let formatter = ISO8601DateFormatter()
+        let payload: [String: Any] = [
+            "injected": injected,
+            "scheduled_at": formatter.string(from: Date()),
+            "target_app": targetApp,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) else { return }
+        try? data.write(to: path, options: .atomic)
     }
 }

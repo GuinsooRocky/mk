@@ -64,9 +64,27 @@ enum NumberNormalizer {
 
     // MARK: - Public API
 
+    /// SA 内置 ITN 把"第N点"枚举语境误转成"第N:00"（时间 ITN 误判）
+    /// 仅当 :00 紧跟在"第N"后才回退到"第N点"；裸 3:00 不动（保留真时间）
+    private static let enumTimeRegex = try! NSRegularExpression(
+        pattern: "第(\\d{1,2}):00",
+        options: []
+    )
+
+    private static func revertEnumTime(_ text: String) -> String {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let replaced = enumTimeRegex.stringByReplacingMatches(in: text, range: range, withTemplate: "第$1点")
+        if replaced != text {
+            Logger.log("Number", "revertEnumTime: \(text) → \(replaced)")
+        }
+        return replaced
+    }
+
     static func apply(_ text: String) -> String {
+        // Step 0: 先反向修正 SA ITN 误判（第N:00 → 第N点）
+        let preprocessed = revertEnumTime(text)
         var hits: [(span: String, replaced: String)] = []
-        let chars = Array(text)
+        let chars = Array(preprocessed)
         var out: [Character] = []
         out.reserveCapacity(chars.count)
         var i = 0

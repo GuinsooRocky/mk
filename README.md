@@ -35,11 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.3.6）
+## ⬇️ 直接下载（v0.3.7）
 
-[**📦 MK-v0.3.6.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.3.6/MK-v0.3.6.zip)
+[**📦 MK-v0.3.7.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.3.7/MK-v0.3.7.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
+>
+> v0.3.7 新增：终端 (iTerm2/Terminal/Warp) 走 cc hook 学习路径，绕开 raw mode 下 AX 读不到；跨字符集音译能学了（"飞哥妈"↔"Figma"）；说"横杠/中划线/减号"落 ASCII `-`；自签证书优先（rebuild 不丢 TCC 授权）；修 SA 把"第N点"误转"第N:00"
 >
 > v0.3.6 修复：说"空格 / 回车 / 换行"后残留尾标点（SA 自动追加的 `。`）
 >

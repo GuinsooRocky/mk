@@ -58,14 +58,24 @@ cp -R "$BUILD_DIR/release/WE_MK.bundle" "$APP_RESOURCES/"
 # 麦克风/语音识别等权限弹窗永远不出现。
 printf 'APPL????' > "$APP_CONTENTS/PkgInfo"
 
-# 4) ad-hoc 签名
+# 4) 签名：优先用 "MK Development" 自签证书；缺证书回退 ad-hoc
+# 为什么不直接 ad-hoc：ad-hoc 签名的 Designated Requirement 只是 cdhash，
+# 每次 rebuild cdhash 变 → TCC 吊销 Accessibility/Mic/Speech 授权，
+# 导致开发循环里"重装后热键失效，要重新授权"。
+# 自签证书的 DR 含证书指纹（cert fingerprint），跨 build 稳定 → TCC 保留授权。
+#
 # 注意：不加 --options runtime（hardened runtime）。理由：
-#   ad-hoc 签名无法附带 entitlements，hardened runtime 会强制要求
-#   com.apple.security.device.audio-input 等 entitlement，否则直接拒绝
-#   麦克风访问（连权限弹窗都不弹）。Info.plist 的 NSMicrophoneUsageDescription
+#   ad-hoc/自签都无法附带正式 Apple Developer entitlements，
+#   hardened runtime 会强制要求 com.apple.security.device.audio-input 等，
+#   否则直接拒绝麦克风访问。Info.plist 的 NSMicrophoneUsageDescription
 #   在 hardened runtime 下不够用。未来要做 notarization 时配合 entitlements 一起加回。
-echo "[3/6] Codesigning (ad-hoc)..."
-codesign --force --deep --sign - "$APP_BUNDLE"
+if security find-certificate -c "MK Development" >/dev/null 2>&1; then
+    echo "[3/6] Codesigning (MK Development self-signed cert)..."
+    codesign --force --deep --sign "MK Development" "$APP_BUNDLE"
+else
+    echo "[3/6] Codesigning (ad-hoc fallback — TCC perms will reset each build)..."
+    codesign --force --deep --sign - "$APP_BUNDLE"
+fi
 codesign --verify --deep --strict "$APP_BUNDLE" || {
     echo "ERROR: codesign verification failed"
     exit 1

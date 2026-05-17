@@ -1178,18 +1178,32 @@ final class CorrectionDictionary {
         return (terms, corrections)
     }
 
+    /// 解析 learned 字典的错音 token：`错音` 或 `错音#次数`。
+    /// 无 `#数字` 后缀（curated 包）视作次数 1。
+    static func parseErrToken(_ raw: String) -> (err: String, count: Int) {
+        guard let hash = raw.lastIndex(of: "#") else { return (raw, 1) }
+        let countStr = raw[raw.index(after: hash)...]
+        guard let n = Int(countStr), n > 0 else { return (raw, 1) }
+        return (String(raw[..<hash]), n)
+    }
+
     private func parseTxt(_ data: Data) -> (terms: [String], corrections: [String: String])? {
         guard let text = String(data: data, encoding: .utf8) else { return nil }
         var terms: [String] = []
         var corrections: [String: String] = [:]
+        var errWeight: [String: Int] = [:]   // 错音 → 已记录映射的学习次数（curated 包无 #N 视作 1）
         for rawLine in text.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty, !line.hasPrefix("#") else { continue }
             let parts = line.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
             guard let term = parts.first, !term.isEmpty else { continue }
             terms.append(term)
-            for err in parts.dropFirst() where !err.isEmpty {
+            for raw in parts.dropFirst() where !raw.isEmpty {
+                // 同一错音映射到多个正字时：学习次数高者赢（次数相同则后出现者赢）
+                let (err, count) = Self.parseErrToken(raw)
+                guard !err.isEmpty, count >= (errWeight[err] ?? 0) else { continue }
                 corrections[err] = term
+                errWeight[err] = count
             }
         }
         return (terms, corrections)

@@ -27,6 +27,15 @@ enum DictionaryLearner {
             return "skip: invalid pair (wrong='\(wrong)' correct='\(correct)')"
         }
 
+        // Fix 3：错音侧单字 → 拒学。单字 errKey（尤其单个 CJK 常用字如「面」）会被
+        // L1 纠错在每次出现处全量改写 —— 一条 `面→main` 能把「上面/里面/这里面」全毁。
+        // AX 路径靠 CorrectionCapture.isValidLearnPair 的 wLen>=2 挡掉，但 `mk --learn`
+        // CLI 路径（cc-hook 上报）直接进这里、绕过那道下限，所以在此补一道。
+        if w.count < 2 {
+            Logger.log("Learn", "reject: 错音 '\(w)' 是单字，拒学 '\(w)'→'\(c)'（单字 errKey 会全量改写、污染面过大）")
+            return "skip: 错音 '\(w)' 是单字，单字 errKey 会污染所有出现处（拒学）"
+        }
+
         // Fix 2：错音侧本身是合法词 → 拒学。学这条会让你以后再也没法正常听写出该词。
         if let realKind = realWordKind(w) {
             Logger.log("Learn", "reject: '\(w)' 是\(realKind)，拒学 '\(w)'→'\(c)'（会让 '\(w)' 永远没法被听写出来）")
@@ -92,8 +101,13 @@ enum DictionaryLearner {
             return "error: write failed: \(error)"
         }
 
-        // reload 字典
+        // reload 字典（仅对本进程生效）
         reloadAllDictionaries()
+
+        // 广播给常驻 daemon：`mk --learn` 是独立短命进程，写完字典即退出，
+        // daemon 内存里的字典不会自己更新（learned 文件无 file watcher）。
+        // 必须显式通知它 reload，否则学到的纠错要重启 MK 才生效。
+        postReloadNotification()
 
         // 翻 learning_happened flag（首次 learn 即算学习发生过）
         let already = (RuntimeConfig.shared.polishConfig["learning_happened"] as? Bool) ?? false
@@ -138,5 +152,26 @@ enum DictionaryLearner {
         # 格式：正字 | 错音1#次数 | 错音2#次数
 
         """
+    }
+
+    // MARK: - 跨进程 reload 通知
+
+    /// Darwin 通知名：`mk --learn` CLI 进程写完 learned 字典后 post，
+    /// 常驻 daemon 的 observer 收到 → reload。AppDelegate 启动时注册 observer。
+    static let reloadNotificationName = "com.lengmo.mk.dict-learned"
+
+    /// 广播 reload 通知（learn() 写完字典后调）
+    private static func postReloadNotification() {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(reloadNotificationName as CFString),
+            nil, nil, true
+        )
+    }
+
+    /// 收到跨进程 reload 通知时调（AppDelegate 的 Darwin observer 回调里用）
+    static func reloadFromExternalChange() {
+        reloadAllDictionaries()
+        Logger.log("Dict", "reloaded (learned dict changed via mk --learn)")
     }
 }

@@ -189,6 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 后台扫码：mtime 变了才跑，跑完自动 reload 字典
         CodebaseScanner.scheduleBackgroundScan()
 
+        // 监听 `mk --learn` CLI 进程的 reload 通知 —— learn 走独立短命进程，
+        // daemon 不会自己感知 learned 字典更新，靠这个 Darwin 通知触发 reload
+        observeLearnedDictReload()
+
         // 初始化菜单栏
         statusBar = StatusBarController(moduleManager: moduleManager)
 
@@ -256,6 +260,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    /// 注册 Darwin 通知 observer：`mk --learn` 写完 learned 字典后会 post，
+    /// daemon 收到即 reload，省去重启 MK 才生效的旧行为
+    private func observeLearnedDictReload() {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { _, _, _, _, _ in
+                Task { @MainActor in
+                    DictionaryLearner.reloadFromExternalChange()
+                }
+            },
+            DictionaryLearner.reloadNotificationName as CFString,
+            nil,
+            .deliverImmediately
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {

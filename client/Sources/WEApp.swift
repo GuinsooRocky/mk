@@ -40,6 +40,24 @@ struct WEApp {
             return
         }
 
+        // SenseVoice 本地引擎自检：MK --sense-voice-test <wav>
+        if let idx = CommandLine.arguments.firstIndex(of: "--sense-voice-test"),
+           idx + 1 < CommandLine.arguments.count {
+            let wav = CommandLine.arguments[idx + 1]
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                _ = await SenseVoiceEngine.shared.transcribe(wavPath: wav)  // warmup
+                let t0 = CFAbsoluteTimeGetCurrent()
+                let text = await SenseVoiceEngine.shared.transcribe(wavPath: wav)  // 热
+                let ms = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000)
+                print("SenseVoice 热延迟 \(ms)ms: \(text ?? "<nil>")")
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
         // 错例反馈学习：MK --learn "错音" "正字"
         // 追加到 ~/.mk/correction-dictionary-learned.txt + reload；幂等（同条不重复）
         if let idx = CommandLine.arguments.firstIndex(of: "--learn"),
@@ -186,6 +204,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // engine=sensevoice：后台预加载 + 预热，避免首次 PTT 的冷启动 (~660ms)
+        if (polish["engine"] as? String) == "sensevoice", SenseVoiceEngine.shared.isAvailable {
+            Task {
+                if await SenseVoiceEngine.shared.ensureLoaded() {
+                    // 用一条已有录音预热 onnxruntime（首跑建图慢，预热后真实热延迟）
+                    if let warm = try? FileManager.default.contentsOfDirectory(
+                        atPath: WEDataDir.url.appendingPathComponent("audio").path
+                    ).first(where: { $0.hasSuffix(".wav") }) {
+                        _ = await SenseVoiceEngine.shared.transcribe(
+                            wavPath: WEDataDir.url.appendingPathComponent("audio/\(warm)").path
+                        )
+                    }
+                    Logger.log("SenseVoice", "预加载+预热完成，首次 PTT 即热")
+                }
+            }
+        }
+
         // 后台扫码：mtime 变了才跑，跑完自动 reload 字典
         CodebaseScanner.scheduleBackgroundScan()
 
@@ -222,7 +257,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusBar?.setRemoteStatus(status)
             }
             remoteInbox.start(port: UInt16(port), authToken: token)
-            Logger.log("WE", "Remote inbox: ON (:\(port))")
         }
 
         // G1 ambient 模式（config 控制开关）

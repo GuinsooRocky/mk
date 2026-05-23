@@ -53,6 +53,12 @@ mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_DIR/release/MK" "$APP_MACOS/MK"
 cp "$INFO_PLIST" "$APP_CONTENTS/Info.plist"
 cp -R "$BUILD_DIR/release/WE_MK.bundle" "$APP_RESOURCES/"
+# 关键：拷 sherpa-onnx 运行时 dylib 到 MacOS/（与 Makefile run/install 一致）。
+# 二进制 install_name 是 @rpath/...，靠 @executable_path rpath 解析到 MacOS/。
+# 漏拷 → 别人机器 `dyld: Library not loaded` 启动即崩（本机有 Vendor 路径察觉不到）。
+cp Vendor/sherpa-onnx/lib/libsherpa-onnx-c-api.dylib \
+   Vendor/sherpa-onnx/lib/libonnxruntime.1.24.4.dylib \
+   "$APP_MACOS/"
 # PkgInfo: macOS LaunchServices 用它识别 bundle 类型（type=APPL/creator=????）
 # 没有这个文件 LaunchServices 可能不注册 bundle id，导致 TCC 找不到 app，
 # 麦克风/语音识别等权限弹窗永远不出现。

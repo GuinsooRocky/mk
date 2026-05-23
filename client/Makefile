@@ -19,6 +19,7 @@ build:
 run: build
 	@mkdir -p $(APP_MACOS) $(APP_RESOURCES)
 	@cp .build/debug/MK $(APP_MACOS)/MK
+	@cp Vendor/sherpa-onnx/lib/libsherpa-onnx-c-api.dylib Vendor/sherpa-onnx/lib/libonnxruntime.1.24.4.dylib $(APP_MACOS)/
 	@cp Sources/Info.plist $(APP_CONTENTS)/Info.plist
 	@cp -R .build/debug/WE_MK.bundle $(APP_RESOURCES)/
 	@codesign --force --deep --sign "$(CERT_NAME)" $(APP_BUNDLE) 2>/dev/null || codesign --force --deep --sign - $(APP_BUNDLE)
@@ -44,6 +45,7 @@ install: build
 	@echo "=== 构建 app bundle ==="
 	@mkdir -p $(APP_MACOS) $(APP_RESOURCES)
 	@cp .build/debug/MK $(APP_MACOS)/MK
+	@cp Vendor/sherpa-onnx/lib/libsherpa-onnx-c-api.dylib Vendor/sherpa-onnx/lib/libonnxruntime.1.24.4.dylib $(APP_MACOS)/
 	@cp Sources/Info.plist $(APP_CONTENTS)/Info.plist
 	@cp -R .build/debug/WE_MK.bundle $(APP_RESOURCES)/
 	@codesign --force --deep --sign "$(CERT_NAME)" $(APP_BUNDLE) 2>/dev/null || codesign --force --deep --sign - $(APP_BUNDLE)

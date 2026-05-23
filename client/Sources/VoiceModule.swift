@@ -161,6 +161,29 @@ final class VoiceModule: WEModule {
                 }
             }
 
+            // 引擎切换：用所选引擎的转写替换 SA 文本，再交给下面原有管线（字典/filler/标点）。
+            // SA 全程跑（录音落 WAV + 即时回落）；引擎失败就回落 SA，永不让用户空手。
+            if let audioPath = result.audioPath {
+                switch RuntimeConfig.shared.polishConfig["engine"] as? String {
+                case "sensevoice":
+                    if let t = await SenseVoiceEngine.shared.transcribe(wavPath: audioPath) {
+                        Logger.log("Voice", "[Engine=sensevoice] \(bestText) → \(t)")
+                        bestText = t
+                    } else {
+                        Logger.log("Voice", "[Engine=sensevoice] 失败，回落 SA: \(bestText)")
+                    }
+                case "groq":
+                    if let t = await GroqEngine.transcribe(wavPath: audioPath), !t.isEmpty {
+                        Logger.log("Voice", "[Engine=groq] \(bestText) → \(t)")
+                        bestText = t
+                    } else {
+                        Logger.log("Voice", "[Engine=groq] 失败，回落 SA: \(bestText)")
+                    }
+                default:
+                    break  // "sa" 或未设：用 SA 原文
+                }
+            }
+
             let corrected = pipeline.correctText(bestText)
 
             // 流式：让 streamingInjector 做 final diff 注入；它返回 false 说明没触发

@@ -28,6 +28,14 @@ final class RemoteInbox {
     func start(port: UInt16, authToken: String) {
         guard listener == nil else { return }
 
+        // 安全：空 token 拒绝启动。监听口绑全网卡（Tailscale 跨机用），无鉴权 = 同网段
+        // 任何主机都能 POST /transcribe 往当前聚焦窗口注入键盘事件。要用远程接收，
+        // 请在 ~/.mk/config.json 的 remote.auth_token 设一个非空密钥（两端一致）。
+        guard !authToken.isEmpty else {
+            Logger.log("Remote", "拒绝启动：remote.auth_token 为空（无鉴权监听口=安全风险）。设置 auth_token 后重启。")
+            return
+        }
+
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
 

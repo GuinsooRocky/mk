@@ -25,6 +25,7 @@ server/.env
 .claude/cache/
 .claude/tmp/
 .claude/skills/
+.claude/agent-memory/
 
 # Internal docs (not for public)
 PLAN.md

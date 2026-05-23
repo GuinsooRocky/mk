@@ -109,7 +109,8 @@ final class RuntimeConfig {
                 ],
                 "downloads": [:],
                 "remote": [
-                    "enabled": true,
+                    // 默认关：开启即在网络端口监听键盘注入接口，必须配 auth_token 才会真启动（见 RemoteInbox.start）
+                    "enabled": false,
                     "port": 9800,
                     "auth_token": ""
                 ],

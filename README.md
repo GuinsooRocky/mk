@@ -131,7 +131,7 @@ MK 直接解决这些。
 
 ```bash
 git clone https://github.com/GuinsooRocky/mk.git
-cd mike/client
+cd mk/client
 bash scripts/setup-cert.sh        # 创建自签名 "MK Development" 证书（一次）
 swift build
 cp .build/debug/MK .build/MK.app/Contents/MacOS/MK
@@ -140,6 +140,35 @@ open .build/MK.app
 ```
 
 首次启动 macOS 会提示授权：**麦克风 / 语音识别 / Accessibility**——全部允许。
+
+### 启用本地引擎 SenseVoice（可选，离线多语种）
+
+MK 默认用 Apple SpeechAnalyzer（系统自带 zh-CN 模型）。想换离线多语种本地引擎
+SenseVoice（zh/en/ja/ko/yue），需额外下载 ~230MB 模型——它**不随 .app 打包**，以保持发行包小巧。
+
+**1. 下载模型**
+
+源码用户直接跑脚本：
+
+```bash
+bash client/scripts/download-model.sh
+```
+
+预编译用户（没有仓库）手动下载：
+
+```bash
+mkdir -p ~/.mk/models && cd ~/.mk/models
+curl -fL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+tar -xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2 && rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+```
+
+**2. 在 `~/.mk/config.json` 启用**
+
+```json
+"polish": { "engine": "sensevoice" }
+```
+
+重启 MK 生效（启动时后台预加载，首次 PTT 即热）。模型缺失会自动回落 SA，不会崩。
 
 ---
 

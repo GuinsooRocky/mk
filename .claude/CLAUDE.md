@@ -1,5 +1,10 @@
 # MK 项目工作约定
 
+## 纠错系统当前态（ASR correction）
+
+论文调研 + 已做/未做 + 已知限制 + 验证状态，见 **`docs/correction-roadmap.md`**（单文件当前态，过期即改）。
+改纠错逻辑前后必跑 `MK --eval-corpus` 做回归。
+
 ## Git 流程
 
 本项目是单人开发的个人仓（GuinsooRocky/mk），**无 PR review 流程**。

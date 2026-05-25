@@ -22,6 +22,9 @@ final class CorrectionDictionary {
     private(set) var correctionTerms: [String] = []
     /// 错音 → 正字
     private(set) var corrections: [String: String] = [:]
+    /// 用户保护词（小写）—— `~/.mk/protected-terms.txt`，一行一词。这些是你的真实缩写/术语
+    /// （AGG / JIT / Gate / Video …），**绝不被模糊层（L2/L5）纠错**，免得 AGG→AGI、Gate→CUDA。
+    private(set) var protectedTerms: Set<String> = []
     /// 按错音长度倒序排好的 keys（长词优先替换）
     private(set) var sortedErrorKeys: [String] = []
     /// 按错音首字符分桶（Layer 1 single-pass 扫描时按当前位置首字符 O(1) 查 bucket，每桶内已按长度倒序）
@@ -257,6 +260,13 @@ final class CorrectionDictionary {
                 currentMtimes[expanded] = mt
             }
         }
+        // 保护词文件也纳入 mtime 监视：只改它（没动字典）时也要触发重载，否则编辑不生效。
+        // 文件不存在 → 不入表；创建/删除/修改都会让 currentMtimes 变化 → 缓存 miss → 全量重载。
+        let protectedPath = ("~/.mk/protected-terms.txt" as NSString).expandingTildeInPath
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: protectedPath),
+           let mt = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 {
+            currentMtimes[protectedPath] = mt
+        }
         if !lastLoadedMtimes.isEmpty,
            currentMtimes.keys.sorted() == lastLoadedMtimes.keys.sorted(),
            currentMtimes.allSatisfy({ lastLoadedMtimes[$0.key] == $0.value }) {
@@ -316,8 +326,12 @@ final class CorrectionDictionary {
         // 3) corrections = manual + synth（synth 仅对 correctionTerms 范围）
         var allCorrections = manualCorrections
         var synthesized = 0
+        let cappedTermSet = Set(cappedTerms)
         for term in cappedCorrection {
-            for variant in Self.synthesizeVariants(for: term) where allCorrections[variant] == nil {
+            // synth 错音键若本身就是一个真术语（如 CSR 是 frontend 术语、又恰是 SSR 的 S↔C 变体），
+            // 跳过——否则会把用户真说的 CSR 吞成 SSR。manual 登记的错音不走这里、不受影响。
+            for variant in Self.synthesizeVariants(for: term)
+                where allCorrections[variant] == nil && !cappedTermSet.contains(variant) {
                 allCorrections[variant] = term
                 synthesized += 1
             }
@@ -423,6 +437,7 @@ final class CorrectionDictionary {
 
         loadedPath = loadedPaths.joined(separator: ", ")
         lastLoadedMtimes = currentMtimes
+        protectedTerms = Self.loadProtectedTerms()
 
         let dropped = combinedTerms.count - cappedTerms.count
         let dropMsg = dropped > 0 ? " [dropped \(dropped) over hint cap \(Self.maxHintTerms)]" : ""
@@ -519,67 +534,8 @@ final class CorrectionDictionary {
         var result = text
         lastCorrections.removeAll()  // 重置上次记录
 
-        // Layer 1: single-pass left-to-right + 长词优先 + word boundary
-        if !errKeysByFirstChar.isEmpty {
-            let chars = Array(text)
-            var newResult = ""
-            newResult.reserveCapacity(text.count + 16)
-            var i = 0
-            while i < chars.count {
-                var matched = false
-                if let bucket = errKeysByFirstChar[chars[i]] {
-                    // 左边界：上一个字符是 ASCII word char？是则跳过（说明 err 嵌入在更长 word 里，如 t<oken>ifficience）
-                    let leftIsWord = i > 0 && Self.isAsciiWordChar(chars[i - 1])
-                    for err in bucket {  // 已按 length 倒序（长词优先）
-                        let errChars = Array(err)
-                        if i + errChars.count <= chars.count {
-                            var equal = true
-                            for k in 0..<errChars.count where chars[i + k] != errChars[k] {
-                                equal = false
-                                break
-                            }
-                            if equal, let correct = corrections[err] {
-                                // 右边界检查：err 后一个字符是 ASCII word char？是则跳过（防 ide→IDE 把 idea 改成 IDEa）
-                                let nextIdx = i + errChars.count
-                                let rightIsWord = nextIdx < chars.count && Self.isAsciiWordChar(chars[nextIdx])
-                                // err 自身末字符若是 ASCII word char，左右都不能是 word char（否则误纠嵌入式）
-                                let errEndIsWord = Self.isAsciiWordChar(errChars[errChars.count - 1])
-                                let errStartIsWord = Self.isAsciiWordChar(errChars[0])
-                                let leftBlocks = errStartIsWord && leftIsWord
-                                let rightBlocks = errEndIsWord && rightIsWord
-                                if leftBlocks || rightBlocks { continue }
-
-                                // L1 exact: confidence = 0.95（最高，因为是字典精确匹配）
-                                let conf = 0.95
-                                let accept = gateAccept(conf)
-                                let record = CorrectionRecord(
-                                    layer: "L1-exact", original: err, replacement: correct,
-                                    confidence: conf,
-                                    reason: "exact dict match",
-                                    accepted: accept
-                                )
-                                lastCorrections.append(record)
-                                if !accept {
-                                    Logger.log("Dict", "[Gate-reject] L1: \(err)→\(correct) conf=\(conf) < threshold")
-                                    continue
-                                }
-
-                                newResult += correct
-                                i += errChars.count
-                                hits.append("=\(err)→\(correct)")
-                                matched = true
-                                break
-                            }
-                        }
-                    }
-                }
-                if !matched {
-                    newResult.append(chars[i])
-                    i += 1
-                }
-            }
-            result = newResult
-        }
+        // Layer 1: learned/manual 精确纠错（开头一趟）—— single-pass left-to-right + 长词优先 + word boundary
+        result = applyExactCorrections(result, pass: "L1-exact", hits: &hits)
 
         // Layer 2: Levenshtein 兜底（仅 correctionTerms + 长度桶定向 + NSSpellChecker 白名单）
         if !asciiCorrectionByLength.isEmpty {
@@ -598,6 +554,10 @@ final class CorrectionDictionary {
                 if asciiCorrectionByLength[tok.count]?.contains(tok) == true { continue }
                 // 白名单 3：内置高频英文词集合（commonEnglishWords）— 不调 NSSpellChecker（首次 200ms 太慢）
                 if Self.commonEnglishWords.contains(tok.lowercased()) { continue }
+                // 白名单 4：用户保护词（~/.mk/protected-terms.txt）—— 你的真实缩写/术语，绝不模糊纠错
+                if protectedTerms.contains(tok.lowercased()) { continue }
+                // 白名单 5：任何字典正字（不止 correctionTerms 子集）—— 已是已知词就别拿去模糊匹配
+                if termsSet.contains(tok) { continue }
 
                 let maxDist = max(1, tok.count / 4)
                 var best: (term: String, dist: Int)?
@@ -706,6 +666,11 @@ final class CorrectionDictionary {
             result = newOut
         }
 
+        // Layer 1 (final pass): learned 纠错最后一趟 —— 收掉前面模糊层(L2/L4/L5/L6/L3)凭空造出、
+        // 却命中 learned 纠错的词。例：sscale --L5--> Scala，这趟把 learned 的 Scala→skill 收掉。
+        // 根因：模糊层能产出一个开头那趟 L1 本该拦截的词，单趟流水线收不住，必须回扫一次。
+        result = applyExactCorrections(result, pass: "L1-final", hits: &hits)
+
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - tStart) * 1000
         let acceptedCount = lastCorrections.filter { $0.accepted }.count
         let rejectedCount = lastCorrections.count - acceptedCount
@@ -716,6 +681,77 @@ final class CorrectionDictionary {
             Logger.log("Dict", "correct slow \(String(format: "%.1fms", elapsedMs)) (\(text.count)c, no hits)\(gateNote)")
         }
         return result
+    }
+
+    /// L1 精确纠错（learned/manual + synth 错音 → 正字）：single-pass left-to-right，
+    /// 首字符桶 + 长词优先 + word boundary 校验。被 correct() 调用两趟：
+    ///   - 开头 (pass="L1-exact")：纠 ASR 原始输出里的错音
+    ///   - 结尾 (pass="L1-final")：收掉模糊层凭空造出、却命中 learned 纠错的词
+    /// `pass` 仅用于 record.layer / 日志区分两趟，逻辑两趟完全一致。
+    private func applyExactCorrections(_ input: String, pass: String, hits: inout [String]) -> String {
+        guard !errKeysByFirstChar.isEmpty else { return input }
+        let chars = Array(input)
+        var newResult = ""
+        newResult.reserveCapacity(input.count + 16)
+        var i = 0
+        while i < chars.count {
+            var matched = false
+            if let bucket = errKeysByFirstChar[chars[i]] {
+                // 左边界：上一个字符是 ASCII word char？是则跳过（说明 err 嵌入在更长 word 里，如 t<oken>ifficience）
+                let leftIsWord = i > 0 && Self.isAsciiWordChar(chars[i - 1])
+                for err in bucket {  // 已按 length 倒序（长词优先）
+                    let errChars = Array(err)
+                    if i + errChars.count <= chars.count {
+                        var equal = true
+                        for k in 0..<errChars.count where chars[i + k] != errChars[k] {
+                            equal = false
+                            break
+                        }
+                        if equal, let correct = corrections[err] {
+                            // 保护词：源 token 是用户保护词则不动（如 vLLM 既是术语、又被 learned 登记成
+                            // vLLM→LLM）。让用户用 protected-terms.txt 解「词即错音键」的矛盾，且不破坏
+                            // Scala→skill（Scala 不在保护表）。两趟 L1 都生效。
+                            if protectedTerms.contains(err.lowercased()) { continue }
+                            // 右边界检查：err 后一个字符是 ASCII word char？是则跳过（防 ide→IDE 把 idea 改成 IDEa）
+                            let nextIdx = i + errChars.count
+                            let rightIsWord = nextIdx < chars.count && Self.isAsciiWordChar(chars[nextIdx])
+                            // err 自身末字符若是 ASCII word char，左右都不能是 word char（否则误纠嵌入式）
+                            let errEndIsWord = Self.isAsciiWordChar(errChars[errChars.count - 1])
+                            let errStartIsWord = Self.isAsciiWordChar(errChars[0])
+                            let leftBlocks = errStartIsWord && leftIsWord
+                            let rightBlocks = errEndIsWord && rightIsWord
+                            if leftBlocks || rightBlocks { continue }
+
+                            // L1 exact: confidence = 0.95（最高，因为是字典精确匹配）
+                            let conf = 0.95
+                            let accept = gateAccept(conf)
+                            let record = CorrectionRecord(
+                                layer: pass, original: err, replacement: correct,
+                                confidence: conf,
+                                reason: "exact dict match",
+                                accepted: accept
+                            )
+                            lastCorrections.append(record)
+                            if !accept {
+                                Logger.log("Dict", "[Gate-reject] \(pass): \(err)→\(correct) conf=\(conf) < threshold")
+                                continue
+                            }
+
+                            newResult += correct
+                            i += errChars.count
+                            hits.append("=\(err)→\(correct)")
+                            matched = true
+                            break
+                        }
+                    }
+                }
+            }
+            if !matched {
+                newResult.append(chars[i])
+                i += 1
+            }
+        }
+        return newResult
     }
 
     // MARK: - 短语 fuzzy（算法 B）
@@ -757,6 +793,9 @@ final class CorrectionDictionary {
                 let window = Array(toks[idx..<idx + L])
                 let windowJoined = window.map { $0.str }.joined(separator: " ")
                 let windowJoinedNoSpace = window.map { $0.str }.joined()
+
+                // 保护词：窗口里任一 token 是保护词就跳过（修保护机制漏 L4 的洞，如 "js oc"→JSON）
+                if window.contains(where: { protectedTerms.contains($0.str.lowercased()) }) { continue }
 
                 // 路径 a：N-token bucket
                 var bestA: (canonical: String, dist: Int)?
@@ -887,8 +926,9 @@ final class CorrectionDictionary {
                 out += tok
                 continue
             }
-            // 已经是 dict canonical / 常见英文 → 不动
+            // 已经是 dict canonical / 常见英文 / 用户保护词 → 不动
             if termsSet.contains(tok)
+               || protectedTerms.contains(tok.lowercased())
                || Self.englishStopWords.contains(tok.lowercased())
                || Self.commonEnglishWords.contains(tok.lowercased()) {
                 out += tok
@@ -1209,7 +1249,23 @@ final class CorrectionDictionary {
         return (terms, corrections)
     }
 
+    /// 读 `~/.mk/protected-terms.txt` → 小写保护词集合。一行一词，`#` 注释、空行忽略。
+    /// 文件不存在返回空集（= 无保护，行为不变）。
+    static func loadProtectedTerms() -> Set<String> {
+        let path = ("~/.mk/protected-terms.txt" as NSString).expandingTildeInPath
+        guard var text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }  // 剥 UTF-8 BOM，否则首词永久失效
+        var set = Set<String>()
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            set.insert(line.lowercased())
+        }
+        return set
+    }
+
     private func reset() {
+        protectedTerms = []
         terms = []
         termsSet = []
         correctionTerms = []

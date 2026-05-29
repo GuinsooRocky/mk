@@ -63,8 +63,15 @@ enum PunctuationNormalizer {
     /// - unboundedRules：不管边界，全文搜索替换
     static func apply(_ text: String) -> String {
         var hits: [String] = []
+        // 砍掉引擎在松手时自动补的句尾「。」(含其后空白)：push-to-talk 常说半句就松手、后面再补，
+        // 强行加的句号几乎都是错的（用户反馈：逗号好用、就这个尾句号烦）。
+        // 注意：必须在 rules 之前做——用户口述的"句号"此刻还是文字"句号"，rules 之后才变「。」，所以不受影响。
+        var stripped = text
+        while let last = stripped.last, last == "。" || last.isWhitespace {
+            stripped.removeLast()
+        }
         // 0. 智能括号配对——见 smartParens 详注
-        var result = smartParens(in: text, hits: &hits)
+        var result = smartParens(in: stripped, hits: &hits)
         for (source, target) in rules {
             // 重复扫直到找不到独立 token 形式的 source
             while let range = findIsolatedRange(of: source, in: result) {

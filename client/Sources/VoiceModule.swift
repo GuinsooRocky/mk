@@ -149,26 +149,29 @@ final class VoiceModule: WEModule {
 
             let tPipe = CFAbsoluteTimeGetCurrent()
 
-            // 流式路径：用 WAV 整段重处理拿干净 fullText（修 chunk 边界切碎）
-            // 非流式：result.fullText 已经是连续 SA 输出，直接用
-            var bestText = result.fullText
-            if streamingInjector.didTrigger, let audioPath = result.audioPath {
-                let wavURL = URL(fileURLWithPath: audioPath)
-                if let clean = await VoiceSession.transcribeFromFile(at: wavURL),
-                   !clean.text.isEmpty {
-                    bestText = clean.text
-                    Logger.log("Voice", "[Reprocess] using clean text: chunked=\(result.fullText.count)字 → wav=\(clean.text.count)字")
-                }
-            }
-
             // 引擎切换：用所选引擎的转写替换 SA 文本，再交给下面原有管线（字典/filler/标点）。
             // SA 全程跑（录音落 WAV + 即时回落）；引擎失败就回落 SA，永不让用户空手。
+            // WAV 整段重处理（修流式 chunk 边界切碎）只在「纯 SA 路径」或「所选引擎失败」时才跑——
+            // sensevoice/groq 成功时不再白跑一遍 SA 整段解码（那是纯浪费延迟）。
+            var bestText = result.fullText
+
+            // 流式路径才有 chunk 边界切碎问题，需要 WAV 整段重处理拿干净 SA 文本；非流式返回 nil。
+            @MainActor func saReprocess() async -> String? {
+                guard streamingInjector.didTrigger, let audioPath = result.audioPath,
+                      let clean = await VoiceSession.transcribeFromFile(at: URL(fileURLWithPath: audioPath)),
+                      !clean.text.isEmpty else { return nil }
+                return clean.text
+            }
+
             if let audioPath = result.audioPath {
                 switch RuntimeConfig.shared.polishConfig["engine"] as? String {
                 case "sensevoice":
                     if let t = await SenseVoiceEngine.shared.transcribe(wavPath: audioPath) {
                         Logger.log("Voice", "[Engine=sensevoice] \(bestText) → \(t)")
                         bestText = t
+                    } else if let clean = await saReprocess() {
+                        Logger.log("Voice", "[Engine=sensevoice] 失败，回落 SA(WAV重处理): \(clean)")
+                        bestText = clean
                     } else {
                         Logger.log("Voice", "[Engine=sensevoice] 失败，回落 SA: \(bestText)")
                     }
@@ -176,11 +179,18 @@ final class VoiceModule: WEModule {
                     if let t = await GroqEngine.transcribe(wavPath: audioPath), !t.isEmpty {
                         Logger.log("Voice", "[Engine=groq] \(bestText) → \(t)")
                         bestText = t
+                    } else if let clean = await saReprocess() {
+                        Logger.log("Voice", "[Engine=groq] 失败，回落 SA(WAV重处理): \(clean)")
+                        bestText = clean
                     } else {
                         Logger.log("Voice", "[Engine=groq] 失败，回落 SA: \(bestText)")
                     }
                 default:
-                    break  // "sa" 或未设：用 SA 原文
+                    // "sa" 或未设：流式路径仍需 WAV 重处理修 chunk 边界切碎
+                    if let clean = await saReprocess() {
+                        Logger.log("Voice", "[Reprocess] using clean text: chunked=\(result.fullText.count)字 → wav=\(clean.count)字")
+                        bestText = clean
+                    }
                 }
             }
 

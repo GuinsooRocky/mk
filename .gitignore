@@ -40,6 +40,13 @@ Datasets/
 server/eval/datasets/
 test-audio/
 
+# 旧 "WE" 会议模式评测转储（会议模式已删；2026-05-30 移废纸篓清掉 ~11MB）
+server/eval/results/alimeeting_diarization/
+server/eval/results/alimeeting_transcription/
+server/eval/results/we_meeting_e2e/
+server/eval/results/we_nearfield_transcription/
+server/eval/results/ami_diarization/
+
 # Data (user-specific)
 *.jsonl
 *.offset

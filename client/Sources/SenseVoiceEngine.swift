@@ -14,6 +14,11 @@ final class SenseVoiceEngine: @unchecked Sendable {
     private var recognizer: SherpaOnnxOfflineRecognizer?
     private var vad: SherpaOnnxVoiceActivityDetectorWrapper?
 
+    /// live 分段流式：跨 accept 调用累积的不足一窗（512）余量
+    private var liveResidual: [Float] = []
+    /// live 会话是否进行中（liveBegin 置 true，liveEnd 置 false）
+    private var liveActive = false
+
     /// 短于此长度的音频直接整段解码（保持原行为、零额外延迟）。
     /// 超过则用 silero VAD 切成自然语音段逐段解码 —— SenseVoice 是 NAR 离线模型，
     /// 整段塞超长音频会延迟暴涨且中段塌掉（只剩头尾）；按停顿切段后每段都在模型舒适区。
@@ -52,6 +57,104 @@ final class SenseVoiceEngine: @unchecked Sendable {
         }
     }
 
+    // MARK: - Live 分段流式（录音中逐段吐字）
+    //
+    // 录音时持续喂样本 → silero VAD 一遇停顿就切出语音段 → 立刻 SenseVoice 解码 → 回调段文本。
+    // 全程在串行 queue 上跑，onSegment 因此天然按时间顺序回调。
+    // 与松手后的 transcribe(wavPath:) 互斥使用：live 模式下上层不再走 WAV 整段重处理。
+
+    /// 录音开始时调：确保模型+VAD 加载、reset VAD、清余量。返回 false = 缺模型，上层别开 live。
+    func liveBegin() async -> Bool {
+        await withCheckedContinuation { cont in
+            queue.async {
+                guard self.loadOnQueue(), let vad = self.loadVadOnQueue() else {
+                    Logger.log("SenseVoice", "[Live] begin 失败：缺 recognizer/VAD 模型")
+                    cont.resume(returning: false)
+                    return
+                }
+                vad.reset()
+                self.liveResidual = []
+                self.liveActive = true
+                Logger.log("SenseVoice", "[Live] begin")
+                cont.resume(returning: true)
+            }
+        }
+    }
+
+    /// 录音中持续喂样本（来自采集后台队列，归一化 Float @16k）。
+    /// 按 512 窗口喂 VAD，每检出完整段就解码并回调。onSegment 在本 queue 上调用（有序）。
+    func liveAccept(samples: [Float], onSegment: @escaping (String) -> Void) {
+        queue.async {
+            guard self.liveActive, let vad = self.vad, let rec = self.recognizer else { return }
+            self.liveResidual.append(contentsOf: samples)
+            let window = 512
+            while self.liveResidual.count >= window {
+                let chunk = Array(self.liveResidual.prefix(window))
+                self.liveResidual.removeFirst(window)
+                vad.acceptWaveform(samples: chunk)
+                self.liveDrain(vad: vad, rec: rec, onSegment: onSegment)
+            }
+        }
+    }
+
+    /// 松手时调：喂尾部余量 + flush 强吐在途段 → 收尾段解码回调 → 结束 live。
+    func liveEnd(onSegment: @escaping (String) -> Void) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            queue.async {
+                defer {
+                    self.liveActive = false
+                    self.liveResidual = []
+                    cont.resume()
+                }
+                guard let vad = self.vad, let rec = self.recognizer else { return }
+                if !self.liveResidual.isEmpty {
+                    vad.acceptWaveform(samples: self.liveResidual)
+                    self.liveResidual = []
+                    self.liveDrain(vad: vad, rec: rec, onSegment: onSegment)
+                }
+                vad.flush()
+                self.liveDrain(vad: vad, rec: rec, onSegment: onSegment)
+                Logger.log("SenseVoice", "[Live] end")
+            }
+        }
+    }
+
+    /// 把 VAD 已切出的段逐个解码、回调（仅在 queue 上调用）。
+    private func liveDrain(
+        vad: SherpaOnnxVoiceActivityDetectorWrapper,
+        rec: SherpaOnnxOfflineRecognizer,
+        onSegment: (String) -> Void
+    ) {
+        while !vad.isEmpty() {
+            let seg = vad.front()
+            let t0 = CFAbsoluteTimeGetCurrent()
+            let segText = rec.decode(samples: seg.samples, sampleRate: 16_000).text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            vad.pop()
+            if !segText.isEmpty {
+                Logger.log("SenseVoice", "[Live] 段 \(Int((CFAbsoluteTimeGetCurrent() - t0) * 1000))ms → \(segText)")
+                onSegment(segText)
+            }
+        }
+    }
+
+    /// 自测（不需麦克风）：把 WAV 按 chunkSamples 小块"实时"喂进 live 路径，返回有序段文本。
+    /// 验证 liveBegin/liveAccept 残余缓冲/liveDrain/liveEnd 的分块切段 + 段顺序与整段口径一致。
+    func liveTestFromWav(_ path: String, chunkSamples: Int = 1600) async -> [String] {
+        guard let (samples, _) = Self.readWav(path) else { return [] }
+        guard await liveBegin() else { return [] }
+        let box = LiveSegBox()
+        let sink: (String) -> Void = { box.append($0) }
+        var i = 0
+        while i < samples.count {
+            let end = min(i + chunkSamples, samples.count)
+            liveAccept(samples: Array(samples[i..<end]), onSegment: sink)
+            i = end
+        }
+        await liveEnd(onSegment: sink)
+        return box.all()
+    }
+
     // MARK: - 队列内部实现（仅在 queue 上调用）
 
     private func loadOnQueue() -> Bool {
@@ -66,6 +169,7 @@ final class SenseVoiceEngine: @unchecked Sendable {
         let t0 = CFAbsoluteTimeGetCurrent()
         let sv = sherpaOnnxOfflineSenseVoiceModelConfig(
             model: model,
+            language: "zh",   // 锁中文：auto LID 会把部分中英音频误判成 ja 吐假名；强制 zh 仍正常出中英 code-switch
             useInverseTextNormalization: true
         )
         let modelConfig = sherpaOnnxOfflineModelConfig(
@@ -93,10 +197,10 @@ final class SenseVoiceEngine: @unchecked Sendable {
         let silero = sherpaOnnxSileroVadModelConfig(
             model: vadModelPath,
             threshold: 0.5,
-            minSilenceDuration: 0.25,   // ≥250ms 停顿处切段（自然句读/换气）
+            minSilenceDuration: 0.15,   // ≥150ms 停顿处切段（出字更碎更快；250ms 体感偏长，2026-06-02 调）
             minSpeechDuration: 0.1,     // 保住孤立短词（对/嗯/是 这类 <250ms 单音节），靠后面空文本过滤挡噪声
             windowSize: 512,
-            maxSpeechDuration: 10.0     // 无停顿长独白的强切上限，与 directDecodeMaxSamples(10s) 对齐，整段都留在舒适区
+            maxSpeechDuration: 4.0      // 无停顿长独白的强切上限：连续不停说话时每 4s 强切出段解码，避免等到 10s 才返回（2026-06-07 由 10s 下调）
         )
         var config = sherpaOnnxVadModelConfig(sileroVad: silero, sampleRate: 16000, numThreads: 1)
         let v = SherpaOnnxVoiceActivityDetectorWrapper(config: &config, buffer_size_in_seconds: 30)
@@ -199,4 +303,12 @@ final class SenseVoiceEngine: @unchecked Sendable {
         let n = Int(buf.frameLength)
         return (Array(UnsafeBufferPointer(start: ch[0], count: n)), Int(fmt.sampleRate))
     }
+}
+
+/// live 自测用的线程安全段收集器（onSegment 在 SenseVoice 队列上回调）。
+private final class LiveSegBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func append(_ s: String) { lock.lock(); items.append(s); lock.unlock() }
+    func all() -> [String] { lock.lock(); defer { lock.unlock() }; return items }
 }

@@ -41,6 +41,8 @@ MK 直接解决这些。
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
 >
+> v0.4.0 新增：SenseVoice 实时分段（菜单「实时分段（边说边出）」toggle，VAD 一遇停顿即吐段、只 append 准确版，cc 终端安全）；引擎锁定中文（auto LID 会把部分中英音频误判成日语吐假名，强制 zh 仍正常出中英混说）；连续长句强切上限 10s→4s（不停顿独白每 4s 出段，不再死等 10s）
+>
 > v0.3.9 新增：SenseVoice 本地离线引擎（多语种 zh/en/ja/ko/yue，可选；用 `client/scripts/download-model.sh` 拉 ~230MB 模型）；修复 .app 在他人机器缺 dylib 启动崩溃；RemoteInbox 默认关闭 + 强制鉴权（安全）；本地引擎推理移出主线程，不再卡 UI
 >
 > v0.3.8 新增：app blocklist 拦微信热键冲突（右 Option 撞"按住说话"，默认含 `com.tencent.xinWeChat`）；智能括号算法一招吃下 4 种括号（圆 `()` / 方 `[]` / 花 `{}` / 尖 `<>`）+ 同音字鲁棒（"诱惑号"→`)`、"中国号"→`[`），半角输出

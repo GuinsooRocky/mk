@@ -30,6 +30,11 @@ final class VoiceModule: WEModule {
     private var pinnedApp: AppIdentity?
     private var recordingStartT: CFAbsoluteTime = 0
 
+    // live 分段流式（SenseVoice VAD）运行态
+    private var liveSegmentMode = false
+    private var liveLastChar: Character?
+    private var liveSegmentAccum = ""
+
     init() {
         let polish = RuntimeConfig.shared.polishConfig
         // chunk 流式：stability=0（chunk 输入本身已经稳定），activation 极低（首个 chunk 就触发）
@@ -73,7 +78,24 @@ final class VoiceModule: WEModule {
 
         // 每次录音读最新配置（菜单刚切换的话立即生效）
         let polish = RuntimeConfig.shared.polishConfig
-        let streamingEnabled = (polish["streaming_enabled"] as? Bool) ?? false
+
+        // live 分段流式（SenseVoice VAD）：仅在 engine=sensevoice 且模型在时生效；与老 streaming(backspace) 互斥
+        let liveSegment = ((polish["live_segment_enabled"] as? Bool) ?? false)
+            && ((polish["engine"] as? String) == "sensevoice")
+            && SenseVoiceEngine.shared.isAvailable
+        self.liveSegmentMode = liveSegment
+        if liveSegment {
+            liveLastChar = nil
+            liveSegmentAccum = ""
+            TextInjector.beginStreaming()   // 存剪贴板一次；段用 pasteText 追加，松手 endStreaming 恢复
+            voiceSession.liveSegmentEnabled = true
+            voiceSession.onLiveSegment = { [weak self] seg in
+                self?.handleLiveSegment(seg)
+            }
+            Logger.log("Voice", "[Live] 分段流式模式 ON")
+        }
+
+        let streamingEnabled = !liveSegment && ((polish["streaming_enabled"] as? Bool) ?? false)
 
         if streamingEnabled {
             streamingInjector.start(targetApp: pinnedApp)
@@ -115,6 +137,22 @@ final class VoiceModule: WEModule {
         }
     }
 
+    /// live 分段流式：每段（已在主线程、按时间顺序）→ 纠错 → append-only 注入 cc。
+    /// 只追加、绝不 backspace：糙版/双份/要你删 物理消失。
+    private func handleLiveSegment(_ raw: String) {
+        let corrected = pipeline.correctText(raw)
+        guard !corrected.isEmpty else { return }
+        // 段间隔：上一段尾字非空白、本段以 ASCII 字母/数字开头 → 补空格（跨段英文不粘连）
+        var piece = corrected
+        if let last = liveLastChar, !last.isWhitespace,
+           let first = corrected.first, first.isASCII, first.isLetter || first.isNumber {
+            piece = " " + corrected
+        }
+        TextInjector.pasteText(piece)
+        liveSegmentAccum += piece
+        liveLastChar = piece.last
+    }
+
     private func stopAndProcess() {
         guard let session else {
             state = .idle
@@ -137,6 +175,24 @@ final class VoiceModule: WEModule {
             let result = await session.stop()
             let stopMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
             self.session = nil
+
+            // live 分段流式：cc 里已是逐段 append 的准确文本，session.stop() 也已 flush 尾段。
+            // 不再走 SenseVoice WAV 整段 / pipeline.process（会重复注入）。只恢复剪贴板 + 存档。
+            if self.liveSegmentMode {
+                TextInjector.endStreaming()
+                let finalText = self.liveSegmentAccum
+                self.pipeline.saveStreamingResult(
+                    transcription: result, finalText: finalText, targetApp: self.pinnedApp
+                )
+                CorrectionCapture.shared.scheduleCheck(injected: finalText, targetApp: self.pinnedApp)
+                let voiceTotalMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
+                Logger.log("Voice", "[Live] 收尾 voice_total=\(voiceTotalMs)ms 全文\(finalText.count)字: \(finalText)")
+                self.liveSegmentMode = false
+                self.liveSegmentAccum = ""
+                self.liveLastChar = nil
+                state = .idle
+                return
+            }
 
             guard !result.fullText.isEmpty else {
                 Logger.log("Voice", "Empty transcription, skipping")

@@ -59,6 +59,16 @@ final class VoiceSession {
     /// 每次 chunk 完成时的回调，参数是**从录音开始至今**的累积文本。
     var onFinalChunk: ((String) -> Void)?
 
+    // MARK: - Live 分段流式（SenseVoice VAD，与上面的 SA chunk 流式互斥）
+
+    /// live 分段流式开关（VoiceModule 按 config.live_segment_enabled 设置）
+    var liveSegmentEnabled = false
+    /// 每段 SenseVoice 解码完成的回调（已 hop 到主线程、按时间顺序）
+    var onLiveSegment: ((String) -> Void)?
+
+    /// live 段回调的 Sendable sink（start 建立，stop 的 liveEnd flush 复用）
+    private var liveSink: (@Sendable (String) -> Void)?
+
     /// 已经 commit 过的 chunk 累计文本（chunk 之间不丢，stop 时 + 当前 finalize 输出 = 完整 fullText）
     private var cumulativeChunkText: String = ""
 
@@ -204,6 +214,26 @@ final class VoiceSession {
 
         self.captureDelegate = delegate
         self.captureSession = session
+
+        // live 分段流式：开 SenseVoice VAD live 会话，把采集样本路由进去；
+        // 段回调用 DispatchQueue.main.async 有序 hop 到主线程（保段顺序，不用乱序的 Task{}）。
+        if liveSegmentEnabled {
+            let ok = await SenseVoiceEngine.shared.liveBegin()
+            if ok {
+                let sink: @Sendable (String) -> Void = { [weak self] text in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self?.onLiveSegment?(text) }
+                    }
+                }
+                self.liveSink = sink
+                delegate.onSamples = { samples in
+                    SenseVoiceEngine.shared.liveAccept(samples: samples, onSegment: sink)
+                }
+                Logger.log("Voice", "[Live] 分段流式已启用")
+            } else {
+                Logger.log("Voice", "[Live] liveBegin 失败，回落非流式")
+            }
+        }
 
         session.startRunning()
         self.isRunning = true
@@ -380,6 +410,27 @@ final class VoiceSession {
         let stopT1 = CFAbsoluteTimeGetCurrent()
         Logger.log("Voice", "[DIAG] stop: capture stopped in \(String(format: "%.3f", stopT1 - stopT0))s, buffers received: \(bufferCountBefore)")
         Logger.log("Voice", "[DIAG] stop: finalizedText=\(finalizedText.count)字, volatileText=\(volatileText.count)字, words=\(allWords.count)")
+
+        // live 分段流式：flush 尾段（残余样本 + VAD flush）→ 段经 liveSink 有序 append 到 cc。
+        // await 返回时尾段的 main.async append 已全部入队在本 continuation 之前 → 收尾顺序正确。
+        // 随后快速拆 SA（live 不用 SA 文本），省掉最多 5s 的 finalize。
+        if liveSegmentEnabled, let sink = liveSink {
+            await SenseVoiceEngine.shared.liveEnd(onSegment: sink)
+            liveSink = nil
+            inputBuilder?.finish()
+            resultTask?.cancel()
+            resultTask = nil
+            analyzer = nil
+            transcriber = nil
+            isRunning = false
+            Logger.log("Voice", "[Live] stop fast-teardown (跳过 SA finalize)")
+            return TranscriptionResult(
+                fullText: cumulativeChunkText,
+                words: allWords,
+                audioPath: audioFileURL?.path,
+                timestamp: Date()
+            )
+        }
 
         // 告诉分析器音频结束
         inputBuilder?.finish()
@@ -622,6 +673,10 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var wavFormat: AVAudioFormat?
     private(set) var bufferCount = 0
 
+    /// live 分段流式：旁路一份归一化 Float 样本出去（VoiceSession 设置，路由到 SenseVoice live）。
+    /// nil = 未开 live，零开销。
+    var onSamples: (@Sendable ([Float]) -> Void)?
+
     init(inputBuilder: AsyncStream<AnalyzerInput>.Continuation, analyzerFormat: AVAudioFormat?, audioFileURL: URL) {
         self.inputBuilder = inputBuilder
         self.analyzerFormat = analyzerFormat
@@ -679,9 +734,34 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         // 写入 WAV 文件（用 outputBuffer，格式始终一致：Int16 16kHz mono）
         writeToWAV(buffer: outputBuffer)
 
+        // live 分段流式：旁路一份归一化 Float 样本给 SenseVoice live（不影响 SA / WAV 主路）
+        if let onSamples, let floats = Self.normalizedFloats(from: outputBuffer) {
+            onSamples(floats)
+        }
+
         // 发送给 SpeechAnalyzer
         let input = AnalyzerInput(buffer: outputBuffer)
         inputBuilder.yield(input)
+    }
+
+    /// outputBuffer（analyzerFormat，16k mono；Int16 或 Float32）→ 归一化 [Float] [-1,1]。
+    /// SenseVoice decode 吃归一化 Float；与 readWav 的归一化口径一致。
+    private static func normalizedFloats(from buffer: AVAudioPCMBuffer) -> [Float]? {
+        let n = Int(buffer.frameLength)
+        guard n > 0 else { return nil }
+        switch buffer.format.commonFormat {
+        case .pcmFormatFloat32:
+            guard let ch = buffer.floatChannelData else { return nil }
+            return Array(UnsafeBufferPointer(start: ch[0], count: n))
+        case .pcmFormatInt16:
+            guard let ch = buffer.int16ChannelData else { return nil }
+            let p = ch[0]
+            var out = [Float](repeating: 0, count: n)
+            for i in 0..<n { out[i] = Float(p[i]) / 32768.0 }
+            return out
+        default:
+            return nil
+        }
     }
 
     // MARK: - WAV 手动写入（绕过 AVAudioFile）

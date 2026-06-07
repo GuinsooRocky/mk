@@ -58,6 +58,17 @@ final class StatusBarController {
             menu.addItem(NSMenuItem.separator())
         }
 
+        // 实时分段 toggle（SenseVoice VAD：边说边出 + 只 append 准确版；推荐，cc 终端安全）
+        let liveEnabled = (RuntimeConfig.shared.polishConfig["live_segment_enabled"] as? Bool) ?? false
+        let liveTitle = "实时分段（边说边出，SenseVoice）" + (liveEnabled ? "  ✓" : "")
+        let liveItem = NSMenuItem(
+            title: liveTitle,
+            action: #selector(toggleLiveSegment),
+            keyEquivalent: ""
+        )
+        liveItem.target = self
+        menu.addItem(liveItem)
+
         // 流式注入 toggle（实验，默认关）；对钩放在标题后面（不用 state）
         let streamingEnabled = (RuntimeConfig.shared.polishConfig["streaming_enabled"] as? Bool) ?? false
         let streamingTitle = "流式注入（实验，仅 Notes/文档类）" + (streamingEnabled ? "  ✓" : "")
@@ -106,6 +117,14 @@ final class StatusBarController {
 
     @objc private func openHotKeySettings() {
         HotKeySettingsWindow.shared.show()
+    }
+
+    @objc private func toggleLiveSegment() {
+        let current = (RuntimeConfig.shared.polishConfig["live_segment_enabled"] as? Bool) ?? false
+        let newValue = !current
+        RuntimeConfig.shared.setPolishField("live_segment_enabled", value: newValue)
+        Logger.log("StatusBar", "LiveSegment toggled to \(newValue)")
+        setupMenu()
     }
 
     @objc private func toggleStreaming() {

@@ -70,6 +70,23 @@ struct WEApp {
             return
         }
 
+        // live 分段流式自测：MK --live-test <wav>（按 100ms 小块"实时"喂，打印有序段，不需麦克风）
+        if let idx = CommandLine.arguments.firstIndex(of: "--live-test"),
+           idx + 1 < CommandLine.arguments.count {
+            let wav = CommandLine.arguments[idx + 1]
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                let segs = await SenseVoiceEngine.shared.liveTestFromWav(wav)
+                print("=== live 分段自测：\(segs.count) 段 ===")
+                for (i, s) in segs.enumerated() { print("  [\(i)] \(s)") }
+                print("拼接：\(segs.joined())")
+                app.terminate(nil)
+            }
+            app.run()
+            return
+        }
+
         // 错例反馈学习：MK --learn "错音" "正字"
         // 追加到 ~/.mk/correction-dictionary-learned.txt + reload；幂等（同条不重复）
         if let idx = CommandLine.arguments.firstIndex(of: "--learn"),

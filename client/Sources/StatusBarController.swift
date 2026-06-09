@@ -69,17 +69,6 @@ final class StatusBarController {
         liveItem.target = self
         menu.addItem(liveItem)
 
-        // 流式注入 toggle（实验，默认关）；对钩放在标题后面（不用 state）
-        let streamingEnabled = (RuntimeConfig.shared.polishConfig["streaming_enabled"] as? Bool) ?? false
-        let streamingTitle = "流式注入（实验，仅 Notes/文档类）" + (streamingEnabled ? "  ✓" : "")
-        let streamingItem = NSMenuItem(
-            title: streamingTitle,
-            action: #selector(toggleStreaming),
-            keyEquivalent: ""
-        )
-        streamingItem.target = self
-        menu.addItem(streamingItem)
-
         // 学习模式 toggle（默认开）：注入 30s 内监听用户改字，自动入字典
         let learningEnabled = (RuntimeConfig.shared.polishConfig["learning_enabled"] as? Bool) ?? true
         let learningTitle = "学习模式（注入后 30s 自动学）" + (learningEnabled ? "  ✓" : "")
@@ -90,6 +79,26 @@ final class StatusBarController {
         )
         learningItem.target = self
         menu.addItem(learningItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 识别引擎选择（✓ 标当前；点一下切换并写回 config）
+        let currentEngine = (RuntimeConfig.shared.polishConfig["engine"] as? String) ?? "sa"
+        let engineHeader = NSMenuItem(title: "识别引擎", action: nil, keyEquivalent: "")
+        engineHeader.isEnabled = false
+        menu.addItem(engineHeader)
+        let engines: [(id: String, label: String)] = [
+            ("sensevoice", "本地 SenseVoice（离线 / 私密）"),
+            ("tencent", "腾讯云（云端 / 准）"),
+            ("groq", "Groq Whisper（云端）")
+        ]
+        for e in engines {
+            let title = "　" + e.label + (currentEngine == e.id ? "  ✓" : "")
+            let item = NSMenuItem(title: title, action: #selector(selectEngine(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = e.id
+            menu.addItem(item)
+        }
 
         menu.addItem(NSMenuItem.separator())
 
@@ -127,11 +136,10 @@ final class StatusBarController {
         setupMenu()
     }
 
-    @objc private func toggleStreaming() {
-        let current = (RuntimeConfig.shared.polishConfig["streaming_enabled"] as? Bool) ?? false
-        let newValue = !current
-        RuntimeConfig.shared.setPolishField("streaming_enabled", value: newValue)
-        Logger.log("StatusBar", "Streaming toggled to \(newValue)")
+    @objc private func selectEngine(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        RuntimeConfig.shared.setPolishField("engine", value: id)
+        Logger.log("StatusBar", "Engine switched to \(id)")
         setupMenu()
     }
 

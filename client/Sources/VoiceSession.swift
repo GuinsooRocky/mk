@@ -28,7 +28,6 @@ struct TranscriptionResult: Codable {
 /// AVAudioEngine 的 installTap 在蓝牙设备上不触发回调
 @MainActor
 final class VoiceSession {
-    private var captureSession: AVCaptureSession?
     private var captureDelegate: AudioCaptureDelegate?
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
@@ -190,30 +189,14 @@ final class VoiceSession {
         let url = WEDataDir.url.appendingPathComponent("audio/\(fileName).wav")
         audioFileURL = url
 
-        // 9. 启动 AVCaptureSession（替代 AVAudioEngine，兼容蓝牙设备）
-        guard let audioDevice = AVCaptureDevice.default(for: .audio) else {
-            throw VoiceError.noAudioDevice
-        }
-        Logger.log("Voice", "Audio device: \(audioDevice.localizedName)")
-
-        let session = AVCaptureSession()
-        let deviceInput = try AVCaptureDeviceInput(device: audioDevice)
-        session.addInput(deviceInput)
-
-        let audioOutput = AVCaptureAudioDataOutput()
-        let captureQueue = DispatchQueue(label: "com.lengmo.mk.audio-capture")
-
-        // 创建 delegate，捕获所有需要的局部变量（避免访问 @MainActor 的 self）
+        // 9. 麦克风采集 — 走 MicCapture 热麦续命（复用热会话省冷启动 ~150ms，见 MicCapture）
+        // 先建 delegate，wire 好 live 路由，最后才 acquire + attach → 样本开始流入时一切就绪
         let delegate = AudioCaptureDelegate(
             inputBuilder: inputBuilder,
             analyzerFormat: analyzerFormat,
             audioFileURL: url
         )
-        audioOutput.setSampleBufferDelegate(delegate, queue: captureQueue)
-        session.addOutput(audioOutput)
-
         self.captureDelegate = delegate
-        self.captureSession = session
 
         // live 分段流式：开 SenseVoice VAD live 会话，把采集样本路由进去；
         // 段回调用 DispatchQueue.main.async 有序 hop 到主线程（保段顺序，不用乱序的 Task{}）。
@@ -235,10 +218,12 @@ final class VoiceSession {
             }
         }
 
-        session.startRunning()
+        // 拿到（热复用 or 冷启动）采集输出，attach delegate → 样本开始流入
+        let (audioOutput, coldStarted) = try MicCapture.shared.acquire()
+        audioOutput.setSampleBufferDelegate(delegate, queue: MicCapture.shared.captureQueue)
         self.isRunning = true
 
-        Logger.log("Voice", "Session started (AVCaptureSession + SpeechAnalyzer)")
+        Logger.log("Voice", "Session started (\(coldStarted ? "冷启动" : "热复用") + SpeechAnalyzer)")
 
         // 启动 chunk 定时器（如果开启）
         if chunkIntervalMs > 0 {
@@ -401,9 +386,8 @@ final class VoiceSession {
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let bufferCountBefore = captureDelegate?.bufferCount ?? 0
 
-        // 停止音频采集
-        captureSession?.stopRunning()
-        captureSession = nil
+        // 停止音频采集：摘 delegate + 启动续命计时器（不立刻 stopRunning，热麦续命复用，见 MicCapture）
+        MicCapture.shared.release()
         captureDelegate?.close()
         captureDelegate = nil
 

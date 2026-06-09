@@ -43,27 +43,14 @@ final class VoicePipeline {
         return text
     }
 
-    /// 流式路径：跑完 correctText 后用 streamingInjector 注入 → 这里只落历史
-    func saveStreamingResult(
-        transcription: TranscriptionResult,
-        finalText: String,
-        targetApp: AppIdentity?
-    ) {
-        history.save(
-            transcription: transcription,
-            l1Text: finalText,
-            polishedText: nil,
-            finalText: finalText,
-            app: targetApp
-        )
-    }
-
     func process(
         transcription: TranscriptionResult,
+        finalRawText: String? = nil,
         targetApp: AppIdentity?
     ) async {
         let tStart = CFAbsoluteTimeGetCurrent()
-        let rawText = transcription.fullText
+        // finalRawText：引擎切换（sensevoice/groq/tencent）选出的转写文本；nil 时回落 SA 原文
+        let rawText = finalRawText ?? transcription.fullText
         Logger.log("Pipeline", "Raw: \(rawText)")
 
         let l1Text = correctText(rawText)

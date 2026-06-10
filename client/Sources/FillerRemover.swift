@@ -148,8 +148,4 @@ enum FillerRemover {
         result = working
         return result
     }
-
-    private static func isWordChar(_ ch: Character) -> Bool {
-        return ch.isLetter || ch.isNumber
-    }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// 语音模块
@@ -26,9 +27,11 @@ final class VoiceModule: WEModule {
     private var recordingStartT: CFAbsoluteTime = 0
 
     // live 分段（SenseVoice VAD）运行态——只喂浮窗 HUD，绝不注入目标 app
-    private var liveSegmentMode = false
     private var liveLastChar: Character?
     private var liveSegmentAccum = ""
+
+    // 实时流式会话（按 config.stream_provider 选 Soniox/腾讯）；本模式下 HUD 吃云端 interim
+    private var streamSession: (any StreamingSession)?
 
     func onHotKeyDown() {
         if state == .idle {
@@ -71,11 +74,23 @@ final class VoiceModule: WEModule {
             MicCapture.shared.keepAliveSec = Double(keep)
         }
 
-        // 实时预览（SenseVoice VAD 边说边出）：实时分段开 + 本地模型在即生效，与最终引擎无关。
+        // 实时流式（Soniox/腾讯）：边录边发 PCM，HUD 吃云端 interim（比本地 SenseVoice 更准、且与最终版一致）。
+        // 此模式下不再跑 SenseVoice 本地 live（省算力、避免双路）。没配 stream_provider → stream=nil，照旧。
+        let stream = StreamingEngine.makeSession()
+        self.streamSession = stream
+        if let stream {
+            stream.onInterim = { [weak self] text in
+                DispatchQueue.main.async { self?.hud.update(text: text) }
+            }
+            voiceSession.onPCM16k = { pcm in stream.feed(pcm) }
+            Logger.log("Voice", "[Stream] 实时流式 ON（HUD 吃云端 interim）")
+        }
+
+        // 实时预览（SenseVoice VAD 边说边出）：仅「非流式」时启用，与最终引擎无关。
         // 段文本只刷新 HUD 浮窗，不进目标 app；最终版松手后由所选引擎整段产出、一次性回填。
-        let liveSegment = ((polish["live_segment_enabled"] as? Bool) ?? false)
+        let liveSegment = stream == nil
+            && ((polish["live_segment_enabled"] as? Bool) ?? false)
             && SenseVoiceEngine.shared.isAvailable
-        self.liveSegmentMode = liveSegment
         liveLastChar = nil
         liveSegmentAccum = ""
         if liveSegment {
@@ -102,6 +117,8 @@ final class VoiceModule: WEModule {
             } catch {
                 Logger.log("Voice", "Failed to start: \(error)")
                 session = nil
+                streamSession?.abort()
+                streamSession = nil
                 hud.hide()
                 state = .idle
             }
@@ -139,15 +156,27 @@ final class VoiceModule: WEModule {
             let result = await session.stop()
             let stopMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
             self.session = nil
-            self.liveSegmentMode = false
 
             let tPipe = CFAbsoluteTimeGetCurrent()
 
             // 文本来源：SA 整段优先；live 模式跳过 SA finalize 时回落到 live 预览累积版
             var bestText = result.fullText.isEmpty ? self.liveSegmentAccum : result.fullText
 
-            // 引擎切换：用所选引擎的整段转写替换；失败回落上面的 bestText，永不让用户空手
-            if let audioPath = result.audioPath {
+            // 文本来源优先级：① 流式会话定稿（provider 无关）② 各非流式引擎整段转写 ③ SA/live 兜底
+            if let stream = self.streamSession {
+                // 流式：松手收尾，等最后一个分片刷新定稿（~250ms）。失败回落一句话识别，永不让用户空手。
+                let t = await stream.finish()
+                self.streamSession = nil
+                if let t, !t.isEmpty {
+                    Logger.log("Voice", "[Stream] \(bestText) → \(t)")
+                    bestText = t
+                } else if let audioPath = result.audioPath, let one = await TencentEngine.transcribe(wavPath: audioPath), !one.isEmpty {
+                    Logger.log("Voice", "[Stream] 空，回落一句话识别 → \(one)")
+                    bestText = one
+                } else {
+                    Logger.log("Voice", "[Stream] 失败，回落: \(bestText)")
+                }
+            } else if let audioPath = result.audioPath {
                 switch RuntimeConfig.shared.polishConfig["engine"] as? String {
                 case "sensevoice":
                     if let t = await SenseVoiceEngine.shared.transcribe(wavPath: audioPath) {
@@ -186,18 +215,59 @@ final class VoiceModule: WEModule {
             }
 
             // 最终版：一次性回填目标 app（pipeline.process 内部跑 correctText + inject + 落历史 + 学习）
-            await pipeline.process(
+            let injected = await pipeline.process(
                 transcription: result,
                 finalRawText: bestText,
                 targetApp: pinnedApp
             )
-            // 浮窗显示最终版（与回填同步），停留后淡出
-            self.hud.showFinal(text: self.pipeline.correctText(bestText))
+            let finalText = self.pipeline.correctText(bestText)
+            if injected {
+                // 成功：浮窗显示最终版（与回填同步），停留后淡出
+                self.hud.showFinal(text: finalText)
+            } else {
+                // 目标 app 切走/退出 → 没 paste。文本已识别好，浮窗不消失，等用户决定放哪儿
+                self.presentFallback(text: finalText)
+            }
 
             let pipelineMs = Int((CFAbsoluteTimeGetCurrent() - tPipe) * 1000)
             let voiceTotalMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
             Logger.log("Voice", "Timing: recording=\(recordingMs)ms stop_finalize=\(stopMs)ms pipeline=\(pipelineMs)ms voice_total=\(voiceTotalMs)ms")
             state = .idle
+        }
+    }
+
+    /// 注入失败兜底：HUD 临时变成「待处理小托盘」，给 重新粘贴 / 复制 / 取消（不丢用户说过的话）
+    private func presentFallback(text: String) {
+        Logger.log("Voice", "[Fallback] 目标丢失，文本待处置: \(text)")
+        hud.showFallback(
+            text: text,
+            onRetry: { [weak self] in self?.retryInject(text) },
+            onCopy: {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(text, forType: .string)
+                Logger.log("Voice", "[Fallback] 已复制到剪贴板")
+            },
+            onCancel: {
+                Logger.log("Voice", "[Fallback] 取消，剪贴板不动")
+            }
+        )
+    }
+
+    /// 重新粘贴：重新激活原 app 再 paste；还是失败（app 真没了）就继续留着兜底，不丢文本
+    private func retryInject(_ text: String) {
+        if let pid = pinnedApp?.processID,
+           let app = NSRunningApplication(processIdentifier: pid) {
+            app.activate(options: [.activateIgnoringOtherApps])
+        }
+        // 给激活留一点时间（前台切换不是同步的），再 paste
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            if TextInjector.inject(text: text, to: self.pinnedApp) {
+                self.hud.showFinal(text: text)
+            } else {
+                self.presentFallback(text: text)
+            }
         }
     }
 }

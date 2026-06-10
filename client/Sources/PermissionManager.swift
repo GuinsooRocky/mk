@@ -1,9 +1,7 @@
 import AppKit
-import AVFoundation
 
 /// 权限检查与引导
 /// - Accessibility：用于 TextInjector (AX API) 和 ScreenContextProvider (焦点位置)
-/// - Microphone：用于语音录制
 /// - Screen Capture：用于 G3 屏幕上下文感知
 enum PermissionManager {
     static func checkAccessibility() -> Bool {
@@ -15,18 +13,6 @@ enum PermissionManager {
             AXIsProcessTrustedWithOptions(options)
         }
         return trusted
-    }
-
-    static func checkMicrophone() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized:
-            return true
-        case .notDetermined:
-            return await AVCaptureDevice.requestAccess(for: .audio)
-        default:
-            Logger.log("Permission", "Microphone denied, open System Settings")
-            return false
-        }
     }
 
     /// 请求屏幕录制权限（G3 需要）

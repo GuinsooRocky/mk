@@ -44,21 +44,7 @@ final class VoiceSession {
     private var volatileText = ""
     private var allWords: [WordInfo] = []
 
-    /// 识别完成时的回调
-    var onResult: ((TranscriptionResult) -> Void)?
-
-    /// 实时部分结果回调（可选，用于 UI 显示）
-    var onPartialResult: ((String) -> Void)?
-
-    // MARK: - Chunk 流式
-
-    /// 分块流式间隔（毫秒）；0 = 禁用（默认）。打开后每隔此时间主动重启 SA 拿一段累计文本。
-    var chunkIntervalMs: Int = 0
-
-    /// 每次 chunk 完成时的回调，参数是**从录音开始至今**的累积文本。
-    var onFinalChunk: ((String) -> Void)?
-
-    // MARK: - Live 分段流式（SenseVoice VAD，与上面的 SA chunk 流式互斥）
+    // MARK: - Live 分段流式（SenseVoice VAD）
 
     /// live 分段流式开关（VoiceModule 按 config.live_segment_enabled 设置）
     var liveSegmentEnabled = false
@@ -68,17 +54,8 @@ final class VoiceSession {
     /// live 段回调的 Sendable sink（start 建立，stop 的 liveEnd flush 复用）
     private var liveSink: (@Sendable (String) -> Void)?
 
-    /// 已经 commit 过的 chunk 累计文本（chunk 之间不丢，stop 时 + 当前 finalize 输出 = 完整 fullText）
-    private var cumulativeChunkText: String = ""
-
-    /// 防止 chunk timer 与正在执行的 flushChunk 重入
-    private var flushInProgress: Bool = false
-
-    /// stop 已开始 — 阻止后续 flushChunk 触发（防 chunk timer 跟 stop 抢资源 → state 卡死）
-    private var isStopping: Bool = false
-
-    /// chunk 定时器 task
-    private var chunkTimer: Task<Void, Never>?
+    /// 旁路一份原始 PCM（16k/16bit/mono LE）出去，给腾讯实时流式边录边发。nil = 不流式，零开销。
+    var onPCM16k: (@Sendable (Data) -> Void)?
 
     init() {}
 
@@ -101,9 +78,6 @@ final class VoiceSession {
         finalizedText = ""
         volatileText = ""
         allWords = []
-        cumulativeChunkText = ""
-        flushInProgress = false
-        isStopping = false
 
         // 1. 查找最佳中文 locale
         let bestLocale = await findChineseLocale()
@@ -176,7 +150,6 @@ final class VoiceSession {
                         }
                     } else {
                         self.volatileText = text
-                        self.onPartialResult?(self.finalizedText + text)
                     }
                 }
             } catch {
@@ -194,7 +167,8 @@ final class VoiceSession {
         let delegate = AudioCaptureDelegate(
             inputBuilder: inputBuilder,
             analyzerFormat: analyzerFormat,
-            audioFileURL: url
+            audioFileURL: url,
+            queue: MicCapture.shared.captureQueue
         )
         self.captureDelegate = delegate
 
@@ -218,6 +192,9 @@ final class VoiceSession {
             }
         }
 
+        // 腾讯实时流式：把原始 PCM 旁路给 WS 会话边录边发（与 SA / WAV / SenseVoice 各路并行）
+        if let onPCM16k { delegate.onPCM16k = onPCM16k }
+
         // 拿到（热复用 or 冷启动）采集输出，attach delegate → 样本开始流入
         let (audioOutput, coldStarted) = try MicCapture.shared.acquire()
         audioOutput.setSampleBufferDelegate(delegate, queue: MicCapture.shared.captureQueue)
@@ -225,125 +202,6 @@ final class VoiceSession {
 
         Logger.log("Voice", "Session started (\(coldStarted ? "冷启动" : "热复用") + SpeechAnalyzer)")
 
-        // 启动 chunk 定时器（如果开启）
-        if chunkIntervalMs > 0 {
-            let intervalMs = chunkIntervalMs
-            chunkTimer = Task { [weak self] in
-                while !(Task.isCancelled) {
-                    try? await Task.sleep(for: .milliseconds(intervalMs))
-                    if Task.isCancelled { break }
-                    guard let self else { break }
-                    let stillRunning = await MainActor.run { self.isRunning }
-                    if !stillRunning { break }
-                    await self.flushChunk()
-                }
-            }
-            Logger.log("Voice", "Chunk timer started (interval=\(chunkIntervalMs)ms)")
-        }
-    }
-
-    /// chunk timer 触发：把当前 SA 终结、拿累计文本、原子切换到一个新 SA
-    /// 关键：captureDelegate 的 inputBuilder 通过 swapInputBuilder 原子换；音频流不停。
-    /// stop 已开始时立即返回（防 chunk timer 跟 stop 抢资源 → state 卡死）
-    private func flushChunk() async {
-        guard isRunning, !isStopping, !flushInProgress else { return }
-        flushInProgress = true
-        defer { flushInProgress = false }
-
-        let chunkT0 = CFAbsoluteTimeGetCurrent()
-
-        // 1. 创建一套新的 SA pipeline
-        let bestLocale = await findChineseLocale()
-        guard let bestLocale, let analyzerFormat = self.analyzerFormat else {
-            Logger.log("Voice", "[Chunk] missing locale/format, skip")
-            return
-        }
-        let newTranscriber = SpeechTranscriber(
-            locale: bestLocale,
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults, .alternativeTranscriptions],
-            attributeOptions: [.audioTimeRange, .transcriptionConfidence]
-        )
-        let newAnalyzer = SpeechAnalyzer(
-            modules: [newTranscriber],
-            options: SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
-        )
-        try? await newAnalyzer.prepareToAnalyze(in: analyzerFormat)
-        let (newSequence, newBuilder) = AsyncStream<AnalyzerInput>.makeStream()
-
-        do {
-            try await newAnalyzer.start(inputSequence: newSequence)
-        } catch {
-            Logger.log("Voice", "[Chunk] new analyzer.start failed: \(error)")
-            return
-        }
-
-        let newResultTask: Task<Void, Never> = Task { [weak self] in
-            do {
-                for try await result in newTranscriber.results {
-                    guard let self else { return }
-                    let text = String(result.text.characters)
-                    if result.isFinal {
-                        self.finalizedText += text
-                        self.volatileText = ""
-                        let words = self.extractWords(from: result.text)
-                        self.allWords.append(contentsOf: words)
-                    } else {
-                        self.volatileText = text
-                        self.onPartialResult?(self.cumulativeChunkText + self.finalizedText + text)
-                    }
-                }
-            } catch {
-                Logger.log("Voice", "[Chunk] new SA result error: \(error)")
-            }
-        }
-
-        // 2. 原子切换 captureDelegate 的 builder（音频从此流向新 SA）
-        let oldAnalyzer = self.analyzer
-        let oldBuilder = self.inputBuilder
-        let oldResultTask = self.resultTask
-        captureDelegate?.swapInputBuilder(to: newBuilder)
-        self.analyzer = newAnalyzer
-        self.transcriber = newTranscriber
-        self.inputBuilder = newBuilder
-        self.resultTask = newResultTask
-
-        // 3. 给老 SA 收尾，拿累计文本
-        oldBuilder?.finish()
-        if let oldAnalyzer {
-            try? await withThrowingTimeout(seconds: 2) {
-                try await oldAnalyzer.finalizeAndFinishThroughEndOfInput()
-            }
-        }
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                if let oldResultTask { await oldResultTask.value }
-            }
-            group.addTask {
-                try? await Task.sleep(for: .milliseconds(200))
-            }
-            await group.next()
-            group.cancelAll()
-        }
-        oldResultTask?.cancel()
-
-        // 4. 拿到这一段（老 SA 的）累计文本，加到 cumulativeChunkText
-        // 砍掉 chunk 末尾的「。」+ 空白：SA finalize 每个 chunk 都会加假句号（chunk 边界 ≠ 真句号）
-        // 真句号在松手时由全文 SA finalize / PunctuationNormalizer 决定
-        var chunkOnlyText = finalizedText + volatileText
-        while let last = chunkOnlyText.last, last == "。" || last.isWhitespace {
-            chunkOnlyText.removeLast()
-        }
-        finalizedText = ""
-        volatileText = ""
-        cumulativeChunkText += chunkOnlyText
-
-        let chunkMs = Int((CFAbsoluteTimeGetCurrent() - chunkT0) * 1000)
-        Logger.log("Voice", "[Chunk] flush \(chunkMs)ms +\(chunkOnlyText.count)字 → cumulative=\(cumulativeChunkText.count)字: \(chunkOnlyText)")
-
-        if !chunkOnlyText.isEmpty {
-            onFinalChunk?(cumulativeChunkText)
-        }
     }
 
     /// G3 → G2：运行时注入屏幕上下文到 SA（提升专有名词/术语识别率）
@@ -365,22 +223,6 @@ final class VoiceSession {
     func stop() async -> TranscriptionResult {
         guard isRunning else {
             return TranscriptionResult(fullText: "", words: [], audioPath: nil, timestamp: Date())
-        }
-
-        // 先打 stop 标记 + 停 chunk 定时器，避免 stop 与 flushChunk 同时跑
-        // 注意：Task.cancel() 协作式取消，flushChunk 入口会检查 isStopping；这里再等当前 flush 完成（最多 200ms）
-        isStopping = true
-        chunkTimer?.cancel()
-        chunkTimer = nil
-
-        // 等待可能正在跑的 flushChunk 完成（最多 200ms）
-        var waitMs = 0
-        while flushInProgress && waitMs < 200 {
-            try? await Task.sleep(for: .milliseconds(20))
-            waitMs += 20
-        }
-        if flushInProgress {
-            Logger.log("Voice", "[DIAG] stop: flushChunk still running after 200ms wait, proceeding anyway")
         }
 
         let stopT0 = CFAbsoluteTimeGetCurrent()
@@ -409,7 +251,7 @@ final class VoiceSession {
             isRunning = false
             Logger.log("Voice", "[Live] stop fast-teardown (跳过 SA finalize)")
             return TranscriptionResult(
-                fullText: cumulativeChunkText,
+                fullText: "",
                 words: allWords,
                 audioPath: audioFileURL?.path,
                 timestamp: Date()
@@ -456,9 +298,7 @@ final class VoiceSession {
         let stopT4 = CFAbsoluteTimeGetCurrent()
         Logger.log("Voice", "[DIAG] stop: drain+cancel took \(String(format: "%.3f", stopT4 - stopT3))s")
 
-        // chunk 流式：fullText = 之前所有 chunk 的累积 + 这次 stop 收到的尾段
-        let tailText = finalizedText + volatileText
-        let fullText = cumulativeChunkText + tailText
+        let fullText = finalizedText + volatileText
         isRunning = false
 
         // 清理
@@ -522,102 +362,6 @@ final class VoiceSession {
         return words
     }
 
-    // MARK: - WAV 整段重处理（流式路径修 chunk 边界切碎）
-
-    /// 用 WAV 文件跑一次纯净 SA pass，绕过 chunk 边界切碎问题
-    /// 用于 stop 时拿"全段连续音频识别的 ground truth"
-    /// RT factor ~0.05-0.1（M5 上 10s 音频 ~500ms-1s）
-    @MainActor
-    static func transcribeFromFile(at url: URL) async -> (text: String, words: [WordInfo])? {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            Logger.log("Voice", "[Reprocess] WAV not found: \(url.path)")
-            return nil
-        }
-
-        let t0 = CFAbsoluteTimeGetCurrent()
-
-        // 1) locale
-        let supported = await SpeechTranscriber.supportedLocales
-        let prefixes = ["zh-Hans", "zh-CN", "zh-Hant", "zh"]
-        var bestLocale: Locale?
-        for prefix in prefixes {
-            if let m = supported.first(where: { $0.identifier(.bcp47).hasPrefix(prefix) }) {
-                bestLocale = m
-                break
-            }
-        }
-        guard let locale = bestLocale else { return nil }
-
-        // 2) 创建 SA pipeline
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [.alternativeTranscriptions],
-            attributeOptions: [.audioTimeRange, .transcriptionConfidence]
-        )
-        let analyzer = SpeechAnalyzer(
-            modules: [transcriber],
-            options: SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
-        )
-
-        // 3) 开 audio file
-        let audioFile: AVAudioFile
-        do {
-            audioFile = try AVAudioFile(forReading: url)
-        } catch {
-            Logger.log("Voice", "[Reprocess] open WAV failed: \(error)")
-            return nil
-        }
-
-        // 4) result task
-        let resultTask: Task<(text: String, words: [WordInfo]), Never> = Task {
-            var fullText = ""
-            var allWords: [WordInfo] = []
-            do {
-                for try await result in transcriber.results {
-                    let text = String(result.text.characters)
-                    if result.isFinal {
-                        fullText += text
-                        var words: [WordInfo] = []
-                        typealias ConfKey = AttributeScopes.SpeechAttributes.ConfidenceAttribute
-                        typealias TimeKey = AttributeScopes.SpeechAttributes.TimeRangeAttribute
-                        for (confidence, timeRange, range) in result.text.runs[ConfKey.self, TimeKey.self] {
-                            let wordText = String(result.text[range].characters)
-                            guard !wordText.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-                            words.append(WordInfo(
-                                text: wordText,
-                                confidence: Float(confidence ?? 1.0),
-                                alternatives: [],
-                                startTime: timeRange?.start.seconds ?? 0,
-                                duration: timeRange?.duration.seconds ?? 0
-                            ))
-                        }
-                        allWords.append(contentsOf: words)
-                    }
-                }
-            } catch {
-                Logger.log("Voice", "[Reprocess] result stream error: \(error)")
-            }
-            return (text: fullText, words: allWords)
-        }
-
-        // 5) start with file
-        do {
-            try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
-        } catch {
-            Logger.log("Voice", "[Reprocess] analyzer.start failed: \(error)")
-            resultTask.cancel()
-            return nil
-        }
-
-        // 6) wait for drain
-        let result = await resultTask.value
-
-        let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000)
-        Logger.log("Voice", "[Reprocess] WAV→text \(elapsedMs)ms (\(result.text.count)字, \(result.words.count) words)")
-        return result
-    }
-
     // MARK: - 模型管理
 
     private func ensureModelInstalled(transcriber: SpeechTranscriber, locale: Locale) async throws {
@@ -647,10 +391,11 @@ final class VoiceSession {
 ///
 /// 音频文件使用手动 WAV 写入，彻底避免 AVAudioFile 内部 AudioConverter 的 abort 崩溃
 final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
-    private let builderLock = NSLock()
     private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation
     private let analyzerFormat: AVAudioFormat?
     private let audioFileURL: URL
+    /// 采集回调队列（= setSampleBufferDelegate 用的那条串行队列）。finalizeWAV 丢上去跑，消除竞争。
+    private let queue: DispatchQueue
     private var converter: AVAudioConverter?
     private var fileHandle: FileHandle?
     private var wavDataSize: UInt32 = 0
@@ -661,23 +406,22 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     /// nil = 未开 live，零开销。
     var onSamples: (@Sendable ([Float]) -> Void)?
 
-    init(inputBuilder: AsyncStream<AnalyzerInput>.Continuation, analyzerFormat: AVAudioFormat?, audioFileURL: URL) {
+    /// 旁路一份原始 PCM（Int16 16k mono LE）给腾讯实时流式。nil = 不流式，零开销。
+    var onPCM16k: (@Sendable (Data) -> Void)?
+
+    init(inputBuilder: AsyncStream<AnalyzerInput>.Continuation, analyzerFormat: AVAudioFormat?, audioFileURL: URL, queue: DispatchQueue) {
         self.inputBuilder = inputBuilder
         self.analyzerFormat = analyzerFormat
         // 改用 .wav 扩展名
         self.audioFileURL = audioFileURL.deletingPathExtension().appendingPathExtension("wav")
+        self.queue = queue
         super.init()
     }
 
-    /// chunk 流式：把音频路由到新 builder。后续 captureOutput 喂入新流，不丢音频。
-    func swapInputBuilder(to new: AsyncStream<AnalyzerInput>.Continuation) {
-        builderLock.lock()
-        defer { builderLock.unlock() }
-        inputBuilder = new
-    }
-
+    /// 收尾 WAV。必须从采集队列「外」调用（现仅 stop() @MainActor 调）。
+    /// queue.sync：①等掉在途的最后一帧 captureOutput（drain）②与 writeToWAV 同队列串行 → 句柄/字节数零竞争。
     func close() {
-        finalizeWAV()
+        queue.sync { finalizeWAV() }
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
@@ -770,6 +514,9 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         let data = Data(bytes: mData, count: byteCount)
         fileHandle?.write(data)
         wavDataSize += UInt32(byteCount)
+
+        // 旁路给腾讯实时流式（同一份 Int16 16k PCM，发 WS 边录边转）
+        onPCM16k?(data)
     }
 
     private func finalizeWAV() {
@@ -891,17 +638,5 @@ func withThrowingTimeout<T: Sendable>(seconds: TimeInterval, operation: @Sendabl
         let result = try await group.next()!
         group.cancelAll()
         return result
-    }
-}
-
-/// 带超时的 async 执行（non-throwing 版本）
-func withTimeout(seconds: TimeInterval, operation: @Sendable @escaping () async -> Void) async {
-    await withTaskGroup(of: Void.self) { group in
-        group.addTask { await operation() }
-        group.addTask {
-            try? await Task.sleep(for: .seconds(seconds))
-        }
-        await group.next()
-        group.cancelAll()
     }
 }

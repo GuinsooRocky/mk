@@ -189,15 +189,6 @@ struct WEApp {
     }
 }
 
-
-/// CLI 参数解析（自检 / 评估 CLI 共用）
-enum CLIUtils {
-    static func parseArg(_ args: [String], key: String) -> String? {
-        guard let idx = args.firstIndex(of: key), idx + 1 < args.count else { return nil }
-        return args[idx + 1]
-    }
-}
-
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?

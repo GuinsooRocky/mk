@@ -36,7 +36,7 @@
 3. **L1 纠错管线**（`VoicePipeline.correctText`，全程 <50ms，无 LLM）：
    `CorrectionDictionary.correct`（多层 L1→L2→L4→L5→L6→L3，含保护词 / learned / 领域字典 / codebase 扫词）
    → `NumberNormalizer`（中文数字 ITN）→ `FillerRemover`（去口头禅）→ `PunctuationNormalizer`（口语词转标点 + 智能括号配对 + 句号降级 + 砍松手尾句号）。
-4. **注入**（`TextInjector`）：默认剪贴板 + `Cmd+V` 单次注入，0.5s 后恢复剪贴板；实验性流式 diff 注入（菜单可开，默认关，cc 终端 backspace 不可靠）。
+4. **注入**（`TextInjector`）：目标 app 只收最终版；实时转写显示在 `TranscriptionHUD` 浮窗里，松手后用剪贴板 + `Cmd+V` 单次注入，0.5s 后恢复剪贴板。
 5. **学习回扫**（`CorrectionCapture`）：注入后开 30s 窗口，靠 Accessibility API 读回聚焦控件文本，对比 injected 抽取用户改动 → `CorrectionStore`（喂回 L1 字典 + 蒸馏训练数据）。cc 终端 raw mode 读不到时走 cc-hook pending-learn-prompt 旁路。
 6. **历史落盘**（`VoiceHistory`）：每次会话 → `~/.mk/voice-history.jsonl`（SA 原文 / L1 文本 / 终文 / 词级信息 / 音频路径），蒸馏管线主输入。
 
@@ -63,7 +63,7 @@
 | `WEApp.swift` | 入口 `AppDelegate`；菜单栏 app + 多个 CLI 模式（`--eval-corpus` / `--eval-gate` / `--sense-voice-test` / `--learn` / `--test-pipeline` / `--test-dict-correct` / `--test-codebase-scan` / `--trim`·`--concat` / `--uninstall`） |
 | `WEModule.swift` / `ModuleManager.swift` | 输入模块协议（`onHotKeyDown/Up`）+ 热键路由 |
 | `VoiceModule.swift` | 听写状态机；松手后编排 引擎切换 → L1 → 注入 |
-| `VoiceSession.swift` | AVCaptureSession 采音 + SpeechAnalyzer 流式转写 + 手动 WAV；含实验性 chunk 流式 + WAV 整段重处理 |
+| `VoiceSession.swift` | AVCaptureSession 采音 + SpeechAnalyzer 转写 + SenseVoice live 分段旁路 + 手动 WAV |
 | `SenseVoiceEngine.swift` | sherpa-onnx 原生 SenseVoice 离线引擎 + silero VAD 长句切段 |
 | `GroqEngine.swift` | Groq 云端 Whisper 引擎 |
 | `SherpaOnnx.swift` | sherpa-onnx C API 的 Swift 绑定（vendored 样板，含 OfflineRecognizer / VAD） |
@@ -75,8 +75,8 @@
 | `CorrectionDictionary.swift` | 多层纠错字典（保护词 / learned / 领域 / codebase），见 `correction-roadmap.md` |
 | `CorrectionCapture.swift` / `DictionaryLearner.swift` | 注入后 AX 回扫学用户改动 → 入字典 |
 | `NumberNormalizer.swift` / `FillerRemover.swift` / `PunctuationNormalizer.swift` | L1 数字 ITN / 去口头禅 / 标点 |
-| `TextInjector.swift` | 剪贴板 + `Cmd+V` 注入（单次 / 实验流式） |
-| `StreamingInjector.swift` | 实验性流式 diff 注入（默认关） |
+| `TranscriptionHUD.swift` | 热键期间显示 MK 自己的实时转写 HUD；目标 app 不接收临时文本 |
+| `TextInjector.swift` | 剪贴板 + `Cmd+V` 单次最终文本注入 |
 | `RemoteInbox.swift` | Tailscale 远程 WAV 接收 → SA → 注入 |
 | `RuntimeConfig.swift` | `~/.mk/config.json` 加载 + 文件监视热更新 |
 | `VoiceHistory.swift` / `JSONLWriter.swift` | 会话历史落盘（蒸馏输入） |

@@ -43,11 +43,13 @@ final class VoicePipeline {
         return text
     }
 
+    /// 返回是否真的注入成功（false = 目标 app 切走/退出，文本未 paste，上层走 fallback）
+    @discardableResult
     func process(
         transcription: TranscriptionResult,
         finalRawText: String? = nil,
         targetApp: AppIdentity?
-    ) async {
+    ) async -> Bool {
         let tStart = CFAbsoluteTimeGetCurrent()
         // finalRawText：引擎切换（sensevoice/groq/tencent）选出的转写文本；nil 时回落 SA 原文
         let rawText = finalRawText ?? transcription.fullText
@@ -56,7 +58,7 @@ final class VoicePipeline {
         let l1Text = correctText(rawText)
 
         let tInject = CFAbsoluteTimeGetCurrent()
-        TextInjector.inject(text: l1Text, to: targetApp)
+        let injected = TextInjector.inject(text: l1Text, to: targetApp)
         let injectMs = Int((CFAbsoluteTimeGetCurrent() - tInject) * 1000)
 
         history.save(
@@ -69,5 +71,6 @@ final class VoicePipeline {
 
         let totalMs = Int((CFAbsoluteTimeGetCurrent() - tStart) * 1000)
         Logger.log("Pipeline", "Timing: inject=\(injectMs)ms pipeline_total=\(totalMs)ms")
+        return injected
     }
 }

@@ -197,10 +197,11 @@ final class SenseVoiceEngine: @unchecked Sendable {
         let silero = sherpaOnnxSileroVadModelConfig(
             model: vadModelPath,
             threshold: 0.5,
-            minSilenceDuration: 0.15,   // ≥150ms 停顿处切段（出字更碎更快；250ms 体感偏长，2026-06-02 调）
+            minSilenceDuration: 0.10,   // ≥100ms 停顿处切段（live 仅 HUD 预览，可激进求快；250ms→150ms→100ms）
             minSpeechDuration: 0.1,     // 保住孤立短词（对/嗯/是 这类 <250ms 单音节），靠后面空文本过滤挡噪声
             windowSize: 512,
-            maxSpeechDuration: 4.0      // 无停顿长独白的强切上限：连续不停说话时每 4s 强切出段解码，避免等到 10s 才返回（2026-06-07 由 10s 下调）
+            maxSpeechDuration: 1.5      // 无停顿长独白的强切上限：连续说话每 1.5s 强切出段刷 HUD，避免盯着 4s 没动静。
+                                        // live 只是预览（最终注入走腾讯一句话），碎一点没关系，要的是手感（2026-06-10 由 4s 下调）
         )
         var config = sherpaOnnxVadModelConfig(sileroVad: silero, sampleRate: 16000, numThreads: 1)
         let v = SherpaOnnxVoiceActivityDetectorWrapper(config: &config, buffer_size_in_seconds: 30)

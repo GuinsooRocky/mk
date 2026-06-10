@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 
 /// 热键配置
 ///
@@ -87,12 +86,6 @@ struct HotKeyConfig: Codable, Equatable, Sendable {
             "displayName": displayName,
             "app_blocklist": appBlocklist
         ]
-    }
-
-    /// CGEventFlags 表示（用于 GlobalHotKey 匹配）
-    /// 注意：NSEvent.ModifierFlags 和 CGEventFlags 的 modifier 位是同一套（macOS 内部一致）
-    var cgEventFlags: CGEventFlags {
-        return CGEventFlags(rawValue: UInt64(modifierFlags))
     }
 
     /// 仅取 modifier 标志位（command/shift/option/control/capsLock）

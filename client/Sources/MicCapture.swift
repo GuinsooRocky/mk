@@ -27,8 +27,6 @@ final class MicCapture {
     private var currentDeviceID: String?
     private var idleStopTask: Task<Void, Never>?
 
-    var isWarm: Bool { session?.isRunning ?? false }
-
     /// 录音开始时调：返回正在运行的 audioOutput（必要时冷启动 / 设备变更则重建），
     /// 调用方拿到后 setSampleBufferDelegate 即开始收样本。
     /// 返回 coldStarted：true = 这次吃了硬件热身；false = 复用热会话（零冷启动）。

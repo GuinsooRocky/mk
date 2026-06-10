@@ -4,9 +4,8 @@ import Foundation
 ///
 /// **职责拆开**（避免一份大表跑所有事）：
 /// - **terms** → 注入 SA `contextualStrings`（hint 越多识别越准，硬上限 `maxHintTerms` 默认 800）
-/// - **correctionTerms** → 应用层 `correct()` 的 Levenshtein 兜底跑全表（硬上限 `maxCorrectionTerms` 默认 300，是 terms 的 prefix）
-/// - **corrections**（错音 → 正字哈希）：含**手动 |** 登记 + **C5 自动派生**；synth 仅对 correctionTerms 派生（不对 hint-only 词派生噪音）
-/// - **asciiCorrectionByLength**：correctionTerms 按长度分桶，Levenshtein 只扫 ±maxDist 范围
+/// - **corrections**（错音 → 正字哈希）：含**手动 |** 登记 + **C5 自动派生**；synth 仅对 capped correction terms 派生（不对 hint-only 词派生噪音）
+/// - **asciiCorrectionByLength**：capped correction terms（terms 前 `maxCorrectionTerms` 默认 300）按长度分桶，Levenshtein 只扫 ±maxDist 范围
 ///
 /// .json 格式：`{"正确词": {"errors": ["错音1","错音2"], ...}}`；`_` 前缀 key 视为 meta 跳过
 /// .txt / .md 格式：一行一词 `Word` 或 `Word | 错音1 | 错音2`；`#` 注释；空行忽略
@@ -18,15 +17,11 @@ final class CorrectionDictionary {
     private(set) var terms: [String] = []
     /// terms 的 Set 形式，pinyin Layer 3 用来跳过"输入子串本身就是字典正字"的情况
     private(set) var termsSet: Set<String> = []
-    /// Levenshtein 兜底用 — terms 前 maxCorrectionTerms 个
-    private(set) var correctionTerms: [String] = []
     /// 错音 → 正字
     private(set) var corrections: [String: String] = [:]
     /// 用户保护词（小写）—— `~/.mk/protected-terms.txt`，一行一词。这些是你的真实缩写/术语
     /// （AGG / JIT / Gate / Video …），**绝不被模糊层（L2/L5）纠错**，免得 AGG→AGI、Gate→CUDA。
     private(set) var protectedTerms: Set<String> = []
-    /// 按错音长度倒序排好的 keys（长词优先替换）
-    private(set) var sortedErrorKeys: [String] = []
     /// 按错音首字符分桶（Layer 1 single-pass 扫描时按当前位置首字符 O(1) 查 bucket，每桶内已按长度倒序）
     private(set) var errKeysByFirstChar: [Character: [String]] = [:]
     /// correctionTerms 中 ASCII 词按长度分桶（Levenshtein 用）
@@ -174,12 +169,6 @@ final class CorrectionDictionary {
     static var maxCorrectionTerms: Int = 300
 
     private init() {}
-
-    /// 加载单个字典（向后兼容入口）
-    @discardableResult
-    func load(from path: String) -> Bool {
-        return loadAll(from: [path])
-    }
 
     /// 从 polish 配置一次性 resolve 出"应当加载的字典文件路径列表"。
     /// 所有 callers（WEApp/ContextEnhancer/DictionaryLearner）都走这个，避免 3 处重复构造。
@@ -346,10 +335,8 @@ final class CorrectionDictionary {
         // 5) 提交
         terms = cappedTerms
         termsSet = Set(cappedTerms)
-        correctionTerms = cappedCorrection
         corrections = allCorrections
         let sortedKeys = allCorrections.keys.sorted { $0.count > $1.count }
-        sortedErrorKeys = sortedKeys
         asciiCorrectionByLength = bucketed
         // 算法 A：建拼音 → 字典中文正字反向索引
         var pinyinIdx: [String: String] = [:]
@@ -1268,9 +1255,7 @@ final class CorrectionDictionary {
         protectedTerms = []
         terms = []
         termsSet = []
-        correctionTerms = []
         corrections = [:]
-        sortedErrorKeys = []
         errKeysByFirstChar = [:]
         asciiCorrectionByLength = [:]
         chinesePinyinIndex = [:]

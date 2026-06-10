@@ -294,6 +294,8 @@ Apple 文档建议 ≤100，但**实测 5000 词跟 100 词同延迟**——SA �
   "server": { "endpoint": "http://localhost:11434", "api": "ollama", "model": "qwen3:0.6b" },
   "polish": {
     "enabled": false,
+    "engine": "sa",
+    "live_segment_enabled": true,
     "context_dictionary_enabled": true,
     "context_dictionary_path": "~/.mk/correction-dictionary.txt",
     "context_dictionary_paths": ["~/.mk/correction-dictionary-codebase.txt"],
@@ -306,6 +308,9 @@ Apple 文档建议 ≤100，但**实测 5000 词跟 100 词同延迟**——SA �
 | 字段 | 说明 |
 |---|---|
 | `polish.enabled` | LLM 后处理（暂不启用，qwen3:0.6b 效果差） |
+| `engine` | 最终识别引擎：`sa`(Apple，默认) / `sensevoice`(本地多语种离线) / `tencent`(腾讯一句话，需 `tencent_secret_id`+`tencent_secret_key`) / `groq` |
+| `live_segment_enabled` | 说话时本地 SenseVoice VAD 边说边出，实时刷浮窗 HUD（仅预览，不影响最终注入） |
+| `stream_provider` | 实时流式 provider（**可选**，砍松手后等待）：`soniox`(需 `soniox_api_key`+`soniox_region`) / `tencent`(需 `tencent_appid`，境外有跨境限制)。**不设=不走流式**，用一句话识别。见 `docs/realtime-asr-decision.md` |
 | `context_dictionary_enabled` | 字典 hint + 反向纠错 |
 | `context_dictionary_path` | 用户主字典 |
 | `context_dictionary_paths` | 额外字典数组（codebase 扫生成等） |
@@ -345,11 +350,15 @@ Apple 文档建议 ≤100，但**实测 5000 词跟 100 词同延迟**——SA �
 
 **学习 / 注入**
 - [x] **学习模式 V1** — 注入 30s 内 hook AX 读目标 app 文本 → 中文分词 → LCS → 自动入字典
-- [x] **分块流式注入** — 主动每 2s 重启 SA + 原子切换音频流（菜单 toggle，默认关）
-- [x] **WAV 整段重处理** — 流式 stop 时用整段 WAV 跑纯净 SA pass，修 chunk 边界切碎
+- [x] **转写浮窗 HUD** — 说话时实时刷字、松手覆盖成定稿；目标 app 只收最终文本一次（终端 PTY 不可回改，故实时体验全在 MK 自己的浮窗里）
 - [x] **⌘V throttle** — 1s ≥20 次 paste 自动跳过，防 chunk bug 灌爆 iTerm
 - [x] **句号过频降级** — 「。」+ CJK → 「，」，治 SA 假句号
 - [x] **2-rep 口吃压缩** — "直接直接/其实其实" 自动压一次
+
+**多引擎 / 实时流式**
+- [x] **可切识别引擎** — `sa` / `sensevoice`(本地离线多语种) / `tencent`(一句话识别) / `groq`，菜单栏切换
+- [x] **本地 live 预览** — SenseVoice + silero VAD 边说边出，刷浮窗 HUD（默认 hybrid：本地 live 预览 + 云一句话定稿）
+- [x] **实时流式 provider 架构**（可选）— `StreamingSession` 协议 + Soniox/腾讯实时引擎，边录边传把松手后等待从 ~0.8s 砍到 ~0.3s；config `stream_provider` 一键开关，详见 `docs/realtime-asr-decision.md`
 
 **性能 / 包体**
 - [x] **落字延迟 700ms → 150ms** — 砍 stop() 里 500ms 兜底 sleep，换 await drain

@@ -21,10 +21,4 @@ final class ModuleManager {
         }
         Logger.log("ModuleManager", "Registered module: \(module.name)")
     }
-
-    func activate(_ name: String) {
-        for (key, module) in modules {
-            module.isActive = (key == name)
-        }
-    }
 }

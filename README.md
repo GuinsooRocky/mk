@@ -35,9 +35,9 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.3.9）
+## ⬇️ 直接下载（v0.4.1）
 
-[**📦 MK-v0.3.9.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.3.9/MK-v0.3.9.zip)
+[**📦 MK-v0.4.1.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.1/MK-v0.4.1.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
 >

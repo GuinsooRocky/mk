@@ -9,10 +9,10 @@ import QuartzCore
 /// - 宽度：clamp(360, 目标窗口宽 * 0.25, 640)
 /// - 高度：随文字自动撑高（min 64 → max 240），超出只保留尾部（最近内容），顶部省略
 /// - 样式：NSVisualEffectView dark 磨玻璃 + rgba(18,18,18,0.72) 黑底 + 1px 灰边 + 圆角 16
-/// - 生命周期：热键按下 show → live 段 update → 松手 setProcessing → 最终 showFinal（停留后淡出）
+/// - 生命周期：热键按下 show → live 段 update → 松手 setProcessing → 注入成功 dismissQuick（定稿只落 input，浮窗不回显）
 @MainActor
 final class TranscriptionHUD: NSObject {
-    private let panel: NSPanel
+    private var panel: NSPanel    // var：WindowServer 未上屏时自愈重建（见 healIfNotOnScreen）
     private let containerView: NSView
     private let effectView: NSVisualEffectView
     private let rippleLayer: CALayer
@@ -51,12 +51,7 @@ final class TranscriptionHUD: NSObject {
 
     override init() {
         let initialRect = NSRect(x: 0, y: 0, width: 360, height: 64)
-        panel = NSPanel(
-            contentRect: initialRect,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
+        panel = Self.makePanel(contentRect: initialRect)
         containerView = NSView(frame: initialRect)
         effectView = NSVisualEffectView(frame: initialRect)
         rippleLayer = CALayer()
@@ -66,15 +61,6 @@ final class TranscriptionHUD: NSObject {
         copyButton = NSButton()
         cancelButton = NSButton()
         super.init()
-
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .floating
-        panel.ignoresMouseEvents = true          // 点击穿透，不抢交互（fallback 时临时打开）
-        panel.isFloatingPanel = true
-        panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
 
         containerView.wantsLayer = true
         containerView.layer?.shadowColor = NSColor.black.cgColor
@@ -131,6 +117,25 @@ final class TranscriptionHUD: NSObject {
         panel.contentView = containerView
     }
 
+    /// panel 的全部窗口级配置集中在这里（init 和自愈重建共用同一份口径）
+    private static func makePanel(contentRect: NSRect) -> NSPanel {
+        let p = NSPanel(
+            contentRect: contentRect,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.level = .floating
+        p.ignoresMouseEvents = true          // 点击穿透，不抢交互（fallback 时临时打开）
+        p.isFloatingPanel = true
+        p.hidesOnDeactivate = false
+        p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        return p
+    }
+
     // MARK: - 生命周期
 
     /// 热键按下：在目标窗口顶部居中显示「监听态」
@@ -156,6 +161,35 @@ final class TranscriptionHUD: NSObject {
 
         render(text: "", dimText: true, pulse: true, animateResize: false)
         panel.orderFrontRegardless()
+
+        // 自愈（2026-06-11 事故）：进程 WindowServer 会话异常时 orderFront 静默失效，
+        // AppKit 侧 isVisible=true 但 CGWindowList 报不在屏。下个 runloop 核对，发现分歧就重建 panel。
+        DispatchQueue.main.async { [weak self] in self?.healIfNotOnScreen() }
+    }
+
+    /// AppKit 认为可见但 WindowServer 没上屏 → 重建 panel 重挂内容再 orderFront（一次，不循环）
+    private func healIfNotOnScreen() {
+        guard panel.isVisible, !Self.isOnScreen(windowNumber: panel.windowNumber) else { return }
+        Logger.log("HUD", "orderFront 后 WindowServer 未上屏，重建 panel 自愈")
+        let old = panel
+        let frame = old.frame
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = Self.makePanel(contentRect: frame)
+        panel.contentView = containerView
+        panel.alphaValue = 1
+        panel.setFrame(frame, display: true)
+        panel.orderFrontRegardless()
+        if !Self.isOnScreen(windowNumber: panel.windowNumber) {
+            Logger.log("HUD", "自愈后仍未上屏——WindowServer 会话疑似损坏，建议重启 MK")
+        }
+    }
+
+    /// WindowServer 真相：该窗口当前是否真的在屏（panel.isVisible 只是 AppKit 客户端状态）
+    private static func isOnScreen(windowNumber: Int) -> Bool {
+        guard windowNumber > 0 else { return false }
+        let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(windowNumber)) as? [[String: Any]] ?? []
+        return (info.first?[kCGWindowIsOnscreen as String] as? Bool) == true
     }
 
     /// live 段：更新实时文本（向下生长）
@@ -169,12 +203,12 @@ final class TranscriptionHUD: NSObject {
         render(text: currentText, dimText: currentText.isEmpty, pulse: currentText.isEmpty, animateResize: false)
     }
 
-    /// 最终版：显示后停留再淡出（最终文本已回填目标 app）
-    func showFinal(text: String, holdSec: Double = 0.6) {
+    /// 注入成功：立即快速淡出。定稿唯一落点是目标 app 的 input，浮窗不再回显最终文本
+    /// （消除「浮窗突变成另一引擎结果 + 与 input 双份并存」的交接断层）。
+    func dismissQuick() {
         panel.ignoresMouseEvents = true
         clearFallbackHandlers()
-        render(text: text, dimText: false, pulse: false, animateResize: true)
-        scheduleFade(after: holdSec)
+        scheduleFade(after: 0, duration: 0.15)
     }
 
     /// 注入失败兜底：浮窗不淡出，临时可交互，文本下方出 重新粘贴/复制/取消
@@ -232,12 +266,12 @@ final class TranscriptionHUD: NSObject {
 
     // MARK: - 内部
 
-    private func scheduleFade(after sec: Double) {
+    private func scheduleFade(after sec: Double, duration: Double = 0.22) {
         fadeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.22
+                ctx.duration = duration
                 self.panel.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
                 self?.panel.orderOut(nil)

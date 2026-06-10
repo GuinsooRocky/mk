@@ -119,6 +119,19 @@ final class SenseVoiceEngine: @unchecked Sendable {
         }
     }
 
+    /// 短句快路径：直接关闭 live 会话，不 flush 不解码（整段定稿交由松手后的引擎出）。
+    func liveCancel() async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            queue.async {
+                self.liveActive = false
+                self.liveResidual = []
+                self.vad?.reset()
+                Logger.log("SenseVoice", "[Live] cancel（短句跳过尾段解码）")
+                cont.resume()
+            }
+        }
+    }
+
     /// 把 VAD 已切出的段逐个解码、回调（仅在 queue 上调用）。
     private func liveDrain(
         vad: SherpaOnnxVoiceActivityDetectorWrapper,

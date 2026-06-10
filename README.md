@@ -41,7 +41,9 @@ MK 直接解决这些。
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
 >
-> v0.4.0 新增：SenseVoice 实时分段（菜单「实时分段（边说边出）」toggle，VAD 一遇停顿即吐段、只 append 准确版，cc 终端安全）；引擎锁定中文（auto LID 会把部分中英音频误判成日语吐假名，强制 zh 仍正常出中英混说）；连续长句强切上限 10s→4s（不停顿独白每 4s 出段，不再死等 10s）
+> v0.4.1 新增：浮窗交接重做（注入成功即 0.15s 收起，定稿只落目标 app，不再回显最终文本与 input 双份并存）；短句快路径（<1s 录音跳过 live 尾段解码）；菜单用户语言化（「实时预览」「自动学习我的修改」「标准（云端）/ 离线（本地）」，Groq 仅配 key 显示）；单实例守卫 + 浮窗 WindowServer 未上屏自愈；流式 interim 过纠错管线（节流 200ms，预览≈定稿口径）
+>
+> v0.4.0 新增：SenseVoice 实时分段（菜单 toggle，现名「实时预览（边说边出）」，VAD 一遇停顿即吐段、只 append 准确版，cc 终端安全）；引擎锁定中文（auto LID 会把部分中英音频误判成日语吐假名，强制 zh 仍正常出中英混说）；连续长句强切上限 10s→4s（不停顿独白每 4s 出段，不再死等 10s）
 >
 > v0.3.9 新增：SenseVoice 本地离线引擎（多语种 zh/en/ja/ko/yue，可选；用 `client/scripts/download-model.sh` 拉 ~230MB 模型）；修复 .app 在他人机器缺 dylib 启动崩溃；RemoteInbox 默认关闭 + 强制鉴权（安全）；本地引擎推理移出主线程，不再卡 UI
 >
@@ -350,7 +352,7 @@ Apple 文档建议 ≤100，但**实测 5000 词跟 100 词同延迟**——SA �
 
 **学习 / 注入**
 - [x] **学习模式 V1** — 注入 30s 内 hook AX 读目标 app 文本 → 中文分词 → LCS → 自动入字典
-- [x] **转写浮窗 HUD** — 说话时实时刷字、松手覆盖成定稿；目标 app 只收最终文本一次（终端 PTY 不可回改，故实时体验全在 MK 自己的浮窗里）
+- [x] **转写浮窗 HUD** — 说话时实时刷字；注入成功即 0.15s 收起，定稿只落目标 app 不回显；目标 app 只收最终文本一次（终端 PTY 不可回改，故实时体验全在 MK 自己的浮窗里）
 - [x] **⌘V throttle** — 1s ≥20 次 paste 自动跳过，防 chunk bug 灌爆 iTerm
 - [x] **句号过频降级** — 「。」+ CJK → 「，」，治 SA 假句号
 - [x] **2-rep 口吃压缩** — "直接直接/其实其实" 自动压一次

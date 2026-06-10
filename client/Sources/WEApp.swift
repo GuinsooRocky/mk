@@ -197,6 +197,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let remoteInbox = RemoteInbox()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 单实例守卫：已有同 bundle 实例在跑 → 本实例退出
+        // （双实例 = 双热键双粘贴；2026-06-11 还观测到与老实例 WindowServer 状态互踩导致浮窗失踪）
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            if !others.isEmpty {
+                Logger.log("WE", "另一实例已在运行 (pid \(others.map(\.processIdentifier)))，本实例退出")
+                NSApp.terminate(nil)
+                return
+            }
+        }
+
         // 初始化数据目录
         WEDataDir.ensureExists()
 

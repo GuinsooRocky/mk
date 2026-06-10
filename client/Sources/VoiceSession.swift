@@ -220,7 +220,8 @@ final class VoiceSession {
     }
 
     /// 停止录音并等待最终结果
-    func stop() async -> TranscriptionResult {
+    /// skipLiveTail：短句快路径——live 尾段不 flush 不解码（调用方保证有引擎对整段 WAV 出定稿）
+    func stop(skipLiveTail: Bool = false) async -> TranscriptionResult {
         guard isRunning else {
             return TranscriptionResult(fullText: "", words: [], audioPath: nil, timestamp: Date())
         }
@@ -241,7 +242,11 @@ final class VoiceSession {
         // await 返回时尾段的 main.async append 已全部入队在本 continuation 之前 → 收尾顺序正确。
         // 随后快速拆 SA（live 不用 SA 文本），省掉最多 5s 的 finalize。
         if liveSegmentEnabled, let sink = liveSink {
-            await SenseVoiceEngine.shared.liveEnd(onSegment: sink)
+            if skipLiveTail {
+                await SenseVoiceEngine.shared.liveCancel()
+            } else {
+                await SenseVoiceEngine.shared.liveEnd(onSegment: sink)
+            }
             liveSink = nil
             inputBuilder?.finish()
             resultTask?.cancel()

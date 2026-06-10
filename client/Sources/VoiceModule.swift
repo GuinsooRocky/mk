@@ -32,6 +32,8 @@ final class VoiceModule: WEModule {
 
     // 实时流式会话（按 config.stream_provider 选 Soniox/腾讯）；本模式下 HUD 吃云端 interim
     private var streamSession: (any StreamingSession)?
+    // interim 上屏节流（纠错管线按节流频率跑，预览≈定稿口径）
+    private var interimThrottleT: CFAbsoluteTime = 0
 
     func onHotKeyDown() {
         if state == .idle {
@@ -79,8 +81,9 @@ final class VoiceModule: WEModule {
         let stream = StreamingEngine.makeSession()
         self.streamSession = stream
         if let stream {
+            interimThrottleT = 0
             stream.onInterim = { [weak self] text in
-                DispatchQueue.main.async { self?.hud.update(text: text) }
+                DispatchQueue.main.async { self?.handleInterim(text) }
             }
             voiceSession.onPCM16k = { pcm in stream.feed(pcm) }
             Logger.log("Voice", "[Stream] 实时流式 ON（HUD 吃云端 interim）")
@@ -137,7 +140,19 @@ final class VoiceModule: WEModule {
         }
         liveSegmentAccum += piece
         liveLastChar = piece.last
-        hud.update(text: liveSegmentAccum)
+        // 松手后（processing）只累积不渲染：浮窗不再闪尾段；accum 仍是引擎失败时的回落文本
+        if state == .recording {
+            hud.update(text: liveSegmentAccum)
+        }
+    }
+
+    /// 流式 interim（主线程）：节流 200ms 过纠错管线再上浮窗，预览与定稿同口径
+    private func handleInterim(_ raw: String) {
+        guard state == .recording else { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - interimThrottleT >= 0.2 else { return }
+        interimThrottleT = now
+        hud.update(text: pipeline.correctText(raw))
     }
 
     private func stopAndProcess() {
@@ -153,7 +168,12 @@ final class VoiceModule: WEModule {
         Logger.log("Voice", "Stopping... (recorded \(recordingMs)ms)")
 
         Task {
-            let result = await session.stop()
+            // 短句快路径：松手后有引擎对整段 WAV 出定稿时，<1s 的录音跳过 live 尾段解码
+            // （尾段反正来不及上屏，省 50-100ms；engine=sa 时 live accum 就是定稿，不能跳）
+            let engine = RuntimeConfig.shared.polishConfig["engine"] as? String
+            let hasFinalEngine = self.streamSession != nil
+                || ["sensevoice", "groq", "tencent"].contains(engine ?? "")
+            let result = await session.stop(skipLiveTail: hasFinalEngine && recordingMs < 1000)
             let stopMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
             self.session = nil
 
@@ -222,8 +242,8 @@ final class VoiceModule: WEModule {
             )
             let finalText = self.pipeline.correctText(bestText)
             if injected {
-                // 成功：浮窗显示最终版（与回填同步），停留后淡出
-                self.hud.showFinal(text: finalText)
+                // 成功：定稿唯一落点是 input，浮窗立即收（不回显最终文本，消除双份并存）
+                self.hud.dismissQuick()
             } else {
                 // 目标 app 切走/退出 → 没 paste。文本已识别好，浮窗不消失，等用户决定放哪儿
                 self.presentFallback(text: finalText)
@@ -264,7 +284,7 @@ final class VoiceModule: WEModule {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
             if TextInjector.inject(text: text, to: self.pinnedApp) {
-                self.hud.showFinal(text: text)
+                self.hud.dismissQuick()
             } else {
                 self.presentFallback(text: text)
             }

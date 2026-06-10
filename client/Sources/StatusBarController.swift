@@ -58,9 +58,9 @@ final class StatusBarController {
             menu.addItem(NSMenuItem.separator())
         }
 
-        // 实时分段 toggle（SenseVoice VAD：边说边出 + 只 append 准确版；推荐，cc 终端安全）
+        // 实时预览 toggle（SenseVoice VAD：边说边出 + 只 append 准确版；推荐，cc 终端安全）
         let liveEnabled = (RuntimeConfig.shared.polishConfig["live_segment_enabled"] as? Bool) ?? false
-        let liveTitle = "实时分段（边说边出，SenseVoice）" + (liveEnabled ? "  ✓" : "")
+        let liveTitle = "实时预览（边说边出）" + (liveEnabled ? "  ✓" : "")
         let liveItem = NSMenuItem(
             title: liveTitle,
             action: #selector(toggleLiveSegment),
@@ -71,7 +71,7 @@ final class StatusBarController {
 
         // 学习模式 toggle（默认开）：注入 30s 内监听用户改字，自动入字典
         let learningEnabled = (RuntimeConfig.shared.polishConfig["learning_enabled"] as? Bool) ?? true
-        let learningTitle = "学习模式（注入后 30s 自动学）" + (learningEnabled ? "  ✓" : "")
+        let learningTitle = "自动学习我的修改" + (learningEnabled ? "  ✓" : "")
         let learningItem = NSMenuItem(
             title: learningTitle,
             action: #selector(toggleLearning),
@@ -87,11 +87,16 @@ final class StatusBarController {
         let engineHeader = NSMenuItem(title: "识别引擎", action: nil, keyEquivalent: "")
         engineHeader.isEnabled = false
         menu.addItem(engineHeader)
-        let engines: [(id: String, label: String)] = [
-            ("sensevoice", "本地 SenseVoice（离线 / 私密）"),
-            ("tencent", "腾讯云（云端 / 准）"),
-            ("groq", "Groq Whisper（云端）")
+        // 用户语言命名，不暴露厂商/模型；Groq 是开发期对比引擎，仅配了 key 才显示
+        var engines: [(id: String, label: String)] = [
+            ("tencent", "标准（云端，更准）"),
+            ("sensevoice", "离线（本地，隐私）")
         ]
+        let groqKey = ((RuntimeConfig.shared.polishConfig["groq_api_key"] as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !groqKey.isEmpty {
+            engines.append(("groq", "Groq Whisper（对比测试）"))
+        }
         for e in engines {
             let title = "　" + e.label + (currentEngine == e.id ? "  ✓" : "")
             let item = NSMenuItem(title: title, action: #selector(selectEngine(_:)), keyEquivalent: "")

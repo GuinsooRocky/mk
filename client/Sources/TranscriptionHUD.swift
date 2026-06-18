@@ -2,6 +2,12 @@ import AppKit
 import ApplicationServices
 import QuartzCore
 
+/// 兜底盘需要接收键盘（esc/⏎/⌘C）。borderless panel 默认 canBecomeKey=false，故子类放开。
+/// 仅在 showFallback 时 makeKey；监听/识别阶段从不 makeKey，故不影响「不抢目标 app 焦点」。
+private final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 /// 转写浮窗 HUD（核心原则：目标 app 永远只收到最终文本；实时体验全部发生在 MK 自己的浮窗里）。
 ///
 /// 设计：
@@ -38,6 +44,9 @@ final class TranscriptionHUD: NSObject {
     private var onRetry: (() -> Void)?
     private var onCopy: (() -> Void)?
     private var onCancel: (() -> Void)?
+    private var keyMonitor: Any?              // 兜底盘期间的键盘本地监听
+    private var fallbackTimeout: DispatchWorkItem?
+    private let fallbackTimeoutSec: Double = 12   // 无操作自动淡出（文本未复制即丢弃）
 
     // 顶部锚 + 水平中心 + 宽度（show 时算好，update 复用，保证顶部固定、向下生长）
     private var anchorTopY: CGFloat = 0
@@ -119,7 +128,7 @@ final class TranscriptionHUD: NSObject {
 
     /// panel 的全部窗口级配置集中在这里（init 和自愈重建共用同一份口径）
     private static func makePanel(contentRect: NSRect) -> NSPanel {
-        let p = NSPanel(
+        let p = KeyablePanel(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -217,13 +226,56 @@ final class TranscriptionHUD: NSObject {
                       onCopy: @escaping () -> Void,
                       onCancel: @escaping () -> Void) {
         fadeWork?.cancel()
+        fallbackTimeout?.cancel()
         panel.alphaValue = 1
         self.onRetry = onRetry
         self.onCopy = onCopy
         self.onCancel = onCancel
         panel.ignoresMouseEvents = false          // 临时收下点击（nonactivating，不抢目标 app 焦点）
+        resetCopyButtonTitle()                    // 清掉上一轮可能残留的「已复制 ✓」
         render(text: text, dimText: false, pulse: false, animateResize: true, showButtons: true)
         panel.orderFrontRegardless()
+        panel.makeKey()                           // 临时成为 key window 以接收键盘（nonactivating 不抢 app 级激活）
+        installKeyMonitor()
+        scheduleFallbackTimeout()
+    }
+
+    /// 兜底盘键盘：esc=取消、⏎=重新粘贴（primary）、⌘C=复制。返回 nil 吞事件，返回 event 放行。
+    private func installKeyMonitor() {
+        removeKeyMonitor()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            switch event.keyCode {
+            case 53:                              // esc
+                self.cancelTapped(); return nil
+            case 36, 76:                          // return / 小键盘 enter
+                self.retryTapped(); return nil
+            default:
+                if event.modifierFlags.contains(.command),
+                   event.charactersIgnoringModifiers?.lowercased() == "c" {
+                    self.copyTapped(); return nil
+                }
+                return event
+            }
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
+    }
+
+    /// 兜底盘无操作超时：优雅淡出（文本未复制即丢弃，与「不自动写剪贴板」一致）
+    private func scheduleFallbackTimeout() {
+        fallbackTimeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Logger.log("HUD", "兜底盘超时无操作，自动淡出（文本未复制，已丢弃）")
+            self.panel.ignoresMouseEvents = true
+            self.clearFallbackHandlers()
+            self.scheduleFade(after: 0, duration: 0.3)
+        }
+        fallbackTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + fallbackTimeoutSec, execute: work)
     }
 
     /// 立即隐藏（空/取消）
@@ -238,14 +290,38 @@ final class TranscriptionHUD: NSObject {
 
     // MARK: - fallback 交互
 
-    @objc private func retryTapped() { onRetry?() }      // 结果由调用方决定下一态（成功 showFinal / 仍失败 showFallback）
-    @objc private func copyTapped() { onCopy?(); hide() }
-    @objc private func cancelTapped() { onCancel?(); hide() }
+    @objc private func retryTapped() { onRetry?() }      // 结果由调用方决定下一态（成功 dismissQuick / 仍失败 showFallback）
+
+    /// 复制：写剪贴板后按钮闪「已复制 ✓」短暂停留，再淡出（给用户确认，不瞬间消失）
+    @objc private func copyTapped() {
+        onCopy?()
+        removeKeyMonitor()
+        fallbackTimeout?.cancel()
+        panel.ignoresMouseEvents = true
+        onRetry = nil; onCopy = nil; onCancel = nil
+        copyButton.attributedTitle = NSAttributedString(string: "已复制 ✓", attributes: [
+            .foregroundColor: NSColor(white: 1, alpha: 0.96),
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .medium)
+        ])
+        scheduleFade(after: 0.55, duration: 0.18)
+    }
+
+    @objc private func cancelTapped() { onCancel?(); hide() }   // 取消：立即收
+
+    private func resetCopyButtonTitle() {
+        copyButton.attributedTitle = NSAttributedString(string: "复制", attributes: [
+            .foregroundColor: NSColor(white: 1, alpha: 0.82),
+            .font: NSFont.systemFont(ofSize: 12.5, weight: .regular)
+        ])
+    }
 
     private func clearFallbackHandlers() {
         onRetry = nil
         onCopy = nil
         onCancel = nil
+        removeKeyMonitor()
+        fallbackTimeout?.cancel()
+        fallbackTimeout = nil
     }
 
     private func configureButton(_ b: NSButton, title: String, action: Selector, primary: Bool) {

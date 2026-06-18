@@ -178,6 +178,37 @@ tar -xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2 && rm sherpa
 
 ---
 
+<a id="cloud-asr"></a>
+
+### 启用云端识别（腾讯云，可选，更准）
+
+「标准（云端）」引擎走**腾讯云语音识别**，比本地更准，但需要你**自己的腾讯云密钥**（按量计费，有免费额度）。
+密钥只存在本机 `~/.mk/config.json`，不上传任何第三方。
+
+> 菜单栏 **MK ▾ → 云端识别设置...** 打开配置窗，把下面拿到的三个值粘进去即可（无需手改 JSON）。
+
+**1. 注册并开通语音识别**
+
+- 注册/登录腾讯云 → 开通「语音识别 ASR」：<https://console.cloud.tencent.com/asr>
+
+**2. 拿 SecretId / SecretKey（必填）**
+
+- 访问 [访问管理 → API 密钥管理](https://console.cloud.tencent.com/cam/capi) → **新建密钥**
+- 复制 **SecretId**（`AKID...` 开头）和 **SecretKey**
+
+**3. 拿 AppID（仅「实时预览（边说边出）」需要，否则可留空）**
+
+- [账号信息页](https://console.cloud.tencent.com/developer) 顶部的 **APPID**（一串数字，如 `1300000000`）
+
+**4. 填进配置窗 → 保存**
+
+菜单栏 **云端识别设置...** → 粘 SecretId / SecretKey（/ AppID）→ **保存**。填齐密钥保存后会自动切到云端引擎。
+
+> 也可手改 `~/.mk/config.json` 的 `polish` 段：`tencent_secret_id` / `tencent_secret_key` / `tencent_appid`。
+> 云端连不上时自动回落本地，不会让你空手。
+
+---
+
 ## 使用
 
 按住 **右 Option** 说话，松开 → 文字粘贴到当前光标。

@@ -8,7 +8,8 @@ import Foundation
 ///
 /// 规则：
 /// - 单字 filler 仅在左右是非字母数字（边界）时删；防误伤"嗯哼"等合法组合
-/// - 重复压缩使用 regex backreference `(.)\1{2,}`，先 2-3 字符再 1 字符（顺序敏感）
+/// - 重复压缩使用 regex backreference `(.)\1{N,}`，先代词/虚词单字、再 3/2 字符、最后通用单字（顺序敏感）
+/// - 代词 / 高频虚词单字（我/你/有/是…）口吃 ≥2 次即压；其余单字保持 ≥3 次，护住"看看/试试"合法叠词
 /// - 不处理冗余衔接词（"那个/这个/其实"）— 这些需要 context 判断，规则化容易过度删
 ///
 /// 行业惯例：飞书/讯飞用专门 disfluency removal 模型（基于 BERT 类）；
@@ -19,6 +20,14 @@ enum FillerRemover {
         "嗯", "呃", "啊", "哦", "哎", "唉", "呵", "嘿",
     ]
 
+    /// 代词 / 高频虚词：这些单字不构成合法叠词（不像"看看/试试/天天/个个/人人"），
+    /// 叠字出现 100% 是口吃 disfluency（"我我"/"有有"/"是是"），2 次即压。
+    /// 刻意不收 了/把/个/人/天/家/条 等会合法叠用的字。
+    private static let stutterProneChars: Set<Character> = [
+        "我", "你", "您", "他", "她", "它", "咱",            // 代词
+        "是", "的", "有", "在", "就", "都", "也", "还", "被", "让",  // 高频虚词
+    ]
+
     /// 应用清洗，返回处理后的字符串
     static func apply(_ text: String) -> String {
         var hits: [String] = []
@@ -27,10 +36,14 @@ enum FillerRemover {
         // 1) 删 boundary 之间的单字 filler
         var result = removeIsolatedFillers(text, hits: &hits)
 
-        // 2) 压缩 1-3 字符重复
-        // 1-char：保持 ≥3 次起压（防误伤"看看/试试/好好/慢慢"等合法叠词）
-        // 2-char / 3-char：≥2 次起压（覆盖口吃，"直接直接/其实其实/刚才刚才/不知道不知道"）
-        // 顺序：先长后短，避免 "是的是的是的" 被 1-char 路径先吃了
+        // 2) 压缩重复
+        // 2a) 代词/虚词单字口吃：≥2 次即压（"有有"→"有"）。先跑——它产出的多字重复
+        //     （"我有有我有"→ 先成 "我有我有"）能被下面的 2-char 路径接着吃成 "我有"。
+        result = compressRepeats(result, blockLength: 1, minRepeats: 2, restrictTo: stutterProneChars, hits: &hits)
+        // 2b) 通用多字 / 单字重复：
+        //   3-char / 2-char：≥2 次起压（覆盖口吃，"直接直接/其实其实/刚才刚才/不知道不知道"）
+        //   1-char：保持 ≥3 次起压（防误伤"看看/试试/好好/慢慢"等合法叠词）
+        //   顺序先长后短，避免 "是的是的是的" 被 1-char 路径先吃了
         result = compressRepeats(result, blockLength: 3, minRepeats: 2, hits: &hits)
         result = compressRepeats(result, blockLength: 2, minRepeats: 2, hits: &hits)
         result = compressRepeats(result, blockLength: 1, minRepeats: 3, hits: &hits)
@@ -117,7 +130,7 @@ enum FillerRemover {
     /// 压缩 N 字符重复成 1 次
     /// 例：blockLength=2, minRepeats=2 → "直接直接" → "直接"
     /// 例：blockLength=2, minRepeats=3 → "是的是的是的" → "是的"（"是的是的" 不动）
-    private static func compressRepeats(_ text: String, blockLength: Int, minRepeats: Int = 3, hits: inout [String]) -> String {
+    private static func compressRepeats(_ text: String, blockLength: Int, minRepeats: Int = 3, restrictTo: Set<Character>? = nil, hits: inout [String]) -> String {
         guard blockLength >= 1 && blockLength <= 3 else { return text }
         guard minRepeats >= 2 else { return text }
         // (.{N})\1{minRepeats - 1,} 表示总共 ≥ minRepeats 个 N 长度块
@@ -139,6 +152,8 @@ enum FillerRemover {
             // 跳过任何含 ASCII 字符的 block：数字/英文重复有特定含义（如 "30000000" 是有效数字、"AAAA" 可能是 ASCII 占位）
             // 重复压缩仅作用于中文重复词（"是的是的是的"、"我们我们我们"）
             if block.contains(where: { $0.isASCII }) { continue }
+            // restrictTo（仅代词/虚词单字口吃用）：block 不全在白名单内就跳过
+            if let restrict = restrictTo, !block.allSatisfy({ restrict.contains($0) }) { continue }
 
             let r = Range(m.range, in: working)!
             let times = m.range.length / blockLength

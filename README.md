@@ -35,11 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.4.2）
+## ⬇️ 直接下载（v0.4.3）
 
-[**📦 MK-v0.4.2.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.2/MK-v0.4.2.zip)
+[**📦 MK-v0.4.3.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.3/MK-v0.4.3.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
+>
+> v0.4.3 优化：代词/虚词单字口吃（"我我"/"有有"/"是是"）≥2 次即压成一次——这些字不构成合法叠词、叠出来必是口吃；其余单字仍保持 ≥3 次起压，护住"看看/试试/好好/天天/个个"等合法叠词不误删。配合重排，"我有有我有" → "我有"
 >
 > v0.4.2 修复：短促语气词（"嗯"/"哦"）被过滤成空文本时不再误弹「取消/复制/重新粘贴」兜底盘，直接静默收浮窗（兜底盘只在文本非空、目标 app 真切走时才出）；云端引擎（groq/腾讯）的 URLSession 封 `timeoutIntervalForResource` 总时长上限（per-request 15s + resource 20s），网络半死不活/数据涓流时不再挂死请求，配合上层 deadline 自动回落本地
 >

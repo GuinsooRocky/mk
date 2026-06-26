@@ -35,6 +35,11 @@ final class VoiceModule: WEModule {
     // interim 上屏节流（纠错管线按节流频率跑，预览≈定稿口径）
     private var interimThrottleT: CFAbsoluteTime = 0
 
+    // 收尾死线/看门狗：云引擎到点降级本地（=网络差自动降级）；整条收尾 Task 卡死时强制收浮窗
+    private static let cloudDeadlineSec: Double = 4.0
+    private static let processingWatchdogSec: Double = 8.0
+    private var processingGen = 0  // 每轮收尾 +1；看门狗/迟到 Task 据此判作废
+
     func onHotKeyDown() {
         if state == .idle {
             startRecording()
@@ -167,7 +172,26 @@ final class VoiceModule: WEModule {
         hud.setProcessing(currentText: liveSegmentAccum)
         Logger.log("Voice", "Stopping... (recorded \(recordingMs)ms)")
 
+        // 收尾看门狗：万一下面的收尾 Task 被某个 await（网络/引擎）卡死，到点强制收尾，
+        // 绝不让浮窗永远停在 processing。正常路径下 Task 结束会 cancel 掉它。
+        processingGen &+= 1
+        let gen = processingGen
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self, self.processingGen == gen, self.state == .processing else { return }
+            Logger.log("Voice", "[Watchdog] 收尾超时 \(Self.processingWatchdogSec)s，强制收尾")
+            self.processingGen &+= 1  // 作废可能迟到的 Task 收尾
+            let salvage = self.liveSegmentAccum
+            if salvage.isEmpty {
+                self.hud.hide()
+            } else {
+                self.presentFallback(text: self.pipeline.correctText(salvage))
+            }
+            self.state = .idle
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.processingWatchdogSec, execute: watchdog)
+
         Task {
+            defer { watchdog.cancel() }
             // 短句快路径：松手后有引擎对整段 WAV 出定稿时，<1s 的录音跳过 live 尾段解码
             // （尾段反正来不及上屏，省 50-100ms；engine=sa 时 live accum 就是定稿，不能跳）
             let engine = RuntimeConfig.shared.polishConfig["engine"] as? String
@@ -190,7 +214,8 @@ final class VoiceModule: WEModule {
                 if let t, !t.isEmpty {
                     Logger.log("Voice", "[Stream] \(bestText) → \(t)")
                     bestText = t
-                } else if let audioPath = result.audioPath, let one = await TencentEngine.transcribe(wavPath: audioPath), !one.isEmpty {
+                } else if let audioPath = result.audioPath,
+                          let one = await self.withDeadline(Self.cloudDeadlineSec, label: "tencent-oneshot", { await TencentEngine.transcribe(wavPath: audioPath) }), !one.isEmpty {
                     Logger.log("Voice", "[Stream] 空，回落一句话识别 → \(one)")
                     bestText = one
                 } else {
@@ -206,14 +231,14 @@ final class VoiceModule: WEModule {
                         Logger.log("Voice", "[Engine=sensevoice] 失败，回落: \(bestText)")
                     }
                 case "groq":
-                    if let t = await GroqEngine.transcribe(wavPath: audioPath), !t.isEmpty {
+                    if let t = await self.withDeadline(Self.cloudDeadlineSec, label: "groq", { await GroqEngine.transcribe(wavPath: audioPath) }), !t.isEmpty {
                         Logger.log("Voice", "[Engine=groq] \(bestText) → \(t)")
                         bestText = t
                     } else {
                         Logger.log("Voice", "[Engine=groq] 失败，回落: \(bestText)")
                     }
                 case "tencent":
-                    if let t = await TencentEngine.transcribe(wavPath: audioPath), !t.isEmpty {
+                    if let t = await self.withDeadline(Self.cloudDeadlineSec, label: "tencent", { await TencentEngine.transcribe(wavPath: audioPath) }), !t.isEmpty {
                         Logger.log("Voice", "[Engine=tencent] \(bestText) → \(t)")
                         bestText = t
                     } else {
@@ -222,6 +247,12 @@ final class VoiceModule: WEModule {
                 default:
                     break  // "sa" 或未设：直接用 SA / live 文本
                 }
+            }
+
+            // 看门狗已强制收尾（或已开新一轮录音）→ 这条迟到的收尾作废，别重复注入/乱动浮窗
+            guard self.processingGen == gen else {
+                Logger.log("Voice", "[Watchdog] 收尾迟到作废 (gen \(gen)≠\(self.processingGen))")
+                return
             }
 
             self.liveSegmentAccum = ""
@@ -244,6 +275,9 @@ final class VoiceModule: WEModule {
             if injected {
                 // 成功：定稿唯一落点是 input，浮窗立即收（不回显最终文本，消除双份并存）
                 self.hud.dismissQuick()
+            } else if finalText.isEmpty {
+                // 全是语气词，过滤后空了 → 没东西可贴，跟"识别为空"一样直接收浮窗，别弹兜底盘
+                self.hud.dismissQuick()
             } else {
                 // 目标 app 切走/退出 → 没 paste。文本已识别好，浮窗不消失，等用户决定放哪儿
                 self.presentFallback(text: finalText)
@@ -253,6 +287,24 @@ final class VoiceModule: WEModule {
             let voiceTotalMs = Int((CFAbsoluteTimeGetCurrent() - tStop0) * 1000)
             Logger.log("Voice", "Timing: recording=\(recordingMs)ms stop_finalize=\(stopMs)ms pipeline=\(pipelineMs)ms voice_total=\(voiceTotalMs)ms")
             state = .idle
+        }
+    }
+
+    /// 给一个 async 操作套硬死线。到点（网络差/引擎挂）返回 nil，调用方按"引擎失败"回落本地，
+    /// 并取消底层网络任务（URLSession 收到取消会拆连接）。这既根治"浮窗卡死"，也实现"网络差自动降级"。
+    private func withDeadline<T: Sendable>(
+        _ seconds: Double, label: String, _ op: @Sendable @escaping () async -> T?
+    ) async -> T? {
+        await withTaskGroup(of: (Bool, T?).self) { group in
+            group.addTask { (false, await op()) }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return (true, nil)
+            }
+            defer { group.cancelAll() }
+            guard let first = await group.next() else { return nil }
+            if first.0 { Logger.log("Voice", "[Deadline] \(label) \(seconds)s 未返回，降级本地") }
+            return first.1
         }
     }
 

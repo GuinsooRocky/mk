@@ -21,7 +21,7 @@ MK 直接解决这些。
 | 一句话级 push-to-talk 输入（按住右 Option 说话） | 长录音 / 会议纪要 |
 | 中文为主 + 技术英文混杂（`SwiftUI` / `Node.js` / `event loop` 不被音译） | 全英文段落 |
 | **150ms 落字延迟**（比 superwhisper 快 10 倍）+ 长句**分块流式**每 2s 出一段（菜单 toggle，Notes/文档类用）| 字级实时流（说一字出一字 — SA zh-CN 模型物理上做不到）|
-| 装在 .app 里 **505KB zip / 1.1MB binary**（比 Notes.app 还小一个量级）| 离线 LLM 后处理 |
+| 核心二进制 **1.6MB**（发行 zip 8.2MB，含可选 SenseVoice 本地引擎的 onnxruntime 运行时；纯 Apple SA 不加载它）| 离线 LLM 后处理 |
 | **越用越准**：错字手改一次自动入字典，下次同词不再错 | 跨设备 iCloud 同步学习成果 |
 | 输入到任何 app（cc 终端 / Notes / Safari / 飞书 / 有道云）| iOS / Linux / Windows |
 
@@ -35,11 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.4.1）
+## ⬇️ 直接下载（v0.4.2）
 
-[**📦 MK-v0.4.1.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.1/MK-v0.4.1.zip)
+[**📦 MK-v0.4.2.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.2/MK-v0.4.2.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
+>
+> v0.4.2 修复：短促语气词（"嗯"/"哦"）被过滤成空文本时不再误弹「取消/复制/重新粘贴」兜底盘，直接静默收浮窗（兜底盘只在文本非空、目标 app 真切走时才出）；云端引擎（groq/腾讯）的 URLSession 封 `timeoutIntervalForResource` 总时长上限（per-request 15s + resource 20s），网络半死不活/数据涓流时不再挂死请求，配合上层 deadline 自动回落本地
 >
 > v0.4.1 新增：浮窗交接重做（注入成功即 0.15s 收起，定稿只落目标 app，不再回显最终文本与 input 双份并存）；短句快路径（<1s 录音跳过 live 尾段解码）；菜单用户语言化（「实时预览」「自动学习我的修改」「标准（云端）/ 离线（本地）」，Groq 仅配 key 显示）；单实例守卫 + 浮窗 WindowServer 未上屏自愈；流式 interim 过纠错管线（节流 200ms，预览≈定稿口径）
 >

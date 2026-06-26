@@ -12,6 +12,15 @@ import Foundation
 enum GroqEngine {
     private static let endpoint = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!
 
+    /// 专用 session：除了 per-request 超时，再封一道 timeoutIntervalForResource 总时长上限
+    /// （URLSession.shared 默认 7 天——网络半死不活、数据涓流时请求会挂极久，必须封顶）。
+    private static let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 15
+        c.timeoutIntervalForResource = 20
+        return URLSession(configuration: c)
+    }()
+
     /// engine=groq 且有 key 才启用
     @MainActor
     static func isActive() -> Bool {
@@ -48,7 +57,7 @@ enum GroqEngine {
 
         let t0 = CFAbsoluteTimeGetCurrent()
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await session.data(for: req)
             let ms = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (resp as? HTTPURLResponse)?.statusCode ?? -1

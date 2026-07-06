@@ -54,6 +54,13 @@ enum NumberNormalizer {
 
     private static let decimalChar: Character = "点"
 
+    /// 成语/语气词黑名单：这些「整 span」是语气副词而非数量词，绝不转数字。
+    /// - 千万（千万小心/千万别）会被状态机算成 1000×10000=10000000
+    /// - 万一（万一失败）会被算成 10001
+    /// - 万万（万万没想到）会被算成 20000
+    /// 注意：只挡「整 span 精确相等」——「三千万/一千万」的 span 含前导 digit，不在此列，照常转。
+    private static let idiomBlacklist: Set<String> = ["千万", "万一", "万万"]
+
     /// 一个字符是否参与"数字 span"
     private static func isNumberChar(_ ch: Character) -> Bool {
         return digitMap[ch] != nil
@@ -102,6 +109,12 @@ enum NumberNormalizer {
                 // 单字符 span 不转换 — "一/两" 等 99% 场景是量词（一种/两个/一家/一些），不是数字
                 // 多字 number span（"三十"/"二零二四"/"三千万"）才进 normalizer
                 if span.count < 2 {
+                    out.append(contentsOf: span)
+                    continue
+                }
+
+                // 成语/语气词黑名单：整 span 命中直接原样保留（千万小心/万一/万万）
+                if idiomBlacklist.contains(span) {
                     out.append(contentsOf: span)
                     continue
                 }

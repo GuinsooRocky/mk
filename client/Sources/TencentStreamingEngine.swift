@@ -197,7 +197,9 @@ final class TencentStreamingSession: @unchecked Sendable, StreamingSession {
             "engine_model_type": engType,
             "voice_id": UUID().uuidString,
             "voice_format": "1",            // 1 = PCM
-            "needvad": "0"                  // push-to-talk 自控起止，关服务端 VAD 避免半句被切
+            "needvad": "0",                 // push-to-talk 自控起止，关服务端 VAD 避免半句被切
+            "convert_num_mode": "0"         // 关云端数字智能转换（默认 1）：不转「一个→1个」，收权到本地 NumberNormalizer
+                                            // 文档：https://cloud.tencent.com/document/product/1093/48982
         ]
         let sortedQuery = params.keys.sorted()
             .map { "\($0)=\(params[$0]!)" }

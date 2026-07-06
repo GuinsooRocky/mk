@@ -35,11 +35,13 @@ MK 直接解决这些。
 
 ---
 
-## ⬇️ 直接下载（v0.4.3）
+## ⬇️ 直接下载（v0.4.4）
 
-[**📦 MK-v0.4.3.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.3/MK-v0.4.3.zip)
+[**📦 MK-v0.4.4.zip → 点击下载**](https://github.com/GuinsooRocky/mk/releases/download/v0.4.4/MK-v0.4.4.zip)
 
 > 全部 release 列表：[github.com/GuinsooRocky/mk/releases](https://github.com/GuinsooRocky/mk/releases)
+>
+> v0.4.4 修复：口语数字不再被错转成阿拉伯数字——腾讯云识别关掉自带 ITN（`ConvertNumMode=0`，"一个"不再变"1个"），数字转换收权给本地可控的 NumberNormalizer；成语「千万/万一/万万」加黑名单（"千万小心"不再变"10000000"，而"三千万/一千万/二十一个"照常转）；自学字典加入库门槛（整句 >12 字、纯"一↔1"数字写法差异一律拒学）并清洗存量残渣（`[object Object]`/整句/ITN 残留），"DEV"→"d一v" 误识加兜底
 >
 > v0.4.3 优化：代词/虚词单字口吃（"我我"/"有有"/"是是"）≥2 次即压成一次——这些字不构成合法叠词、叠出来必是口吃；其余单字仍保持 ≥3 次起压，护住"看看/试试/好好/天天/个个"等合法叠词不误删。配合重排，"我有有我有" → "我有"
 >

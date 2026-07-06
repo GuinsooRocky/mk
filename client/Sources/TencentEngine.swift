@@ -64,6 +64,10 @@ enum TencentEngine {
             "EngSerViceType": cfg.engType,
             "SourceType": 1,
             "VoiceFormat": "wav",
+            // ConvertNumMode=0：关云端阿拉伯数字智能转换（默认 1）。云端会把量词「一个」转成「1个」、
+            // 语气词「千万」转成数字，且不可控。收权到本地 NumberNormalizer（可加黑名单/开关）统一管。
+            // 文档：https://cloud.tencent.com/document/product/1093/35646（ConvertNumMode）
+            "ConvertNumMode": 0,
             "Data": audio.base64EncodedString(),
             "DataLen": audio.count
         ]

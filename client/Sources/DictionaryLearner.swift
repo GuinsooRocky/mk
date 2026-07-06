@@ -42,6 +42,20 @@ enum DictionaryLearner {
             return "skip: '\(w)' 本身是\(realKind)，学 '\(w)'→'\(c)' 会污染该词的正常听写（拒学）"
         }
 
+        // Fix 4：长度上限。整句/长片段当词条永远不会再命中，只会把字典撑杂（learned 里实测有
+        // 「每一次会话 session 里面进行一个问答，」这种整句残渣）。正字或错音任一 > 12 字即拒。
+        if w.count > maxLearnLen || c.count > maxLearnLen {
+            Logger.log("Learn", "reject: 过长（w=\(w.count)字 c=\(c.count)字 > \(maxLearnLen)），拒学整句/长片段 '\(w)'→'\(c)'")
+            return "skip: 词条过长（>\(maxLearnLen)字），整句/长片段不入学习字典（拒学）"
+        }
+
+        // Fix 5：仅数字写法差异（一↔1 / 两↔2）→ 拒学。这类是云端 ITN 后遗症的打地鼠残留
+        // （learned 里实测有 小白1/大1/专业1的）。数字转换已收权到 NumberNormalizer，不该再往字典堆。
+        if digitFormCanonical(w) == digitFormCanonical(c) {
+            Logger.log("Learn", "reject: '\(w)'↔'\(c)' 仅数字写法（一↔1/两↔2）不同，属 ITN 残留，拒学（数字转换归 NumberNormalizer 管）")
+            return "skip: '\(w)'↔'\(c)' 只差在数字写法（一↔1），这类归 NumberNormalizer 管、不入学习字典（拒学）"
+        }
+
         var lines = (try? String(contentsOf: learnedURL, encoding: .utf8)) ?? defaultHeader()
         if lines.isEmpty { lines = defaultHeader() }
 
@@ -123,6 +137,19 @@ enum DictionaryLearner {
         let countAction = found ? (bumped ? "次数 +1" : "追加新错音 #1") : "新建条目 #1"
         let conflictNote = conflictWith.isEmpty ? "" : " ⚠️ 与 [\(conflictWith.joined(separator: ", "))] 冲突，按次数裁决"
         return "learn ok: \(c) | \(w) → \(countAction)\(conflictNote) → \(learnedURL.path)"
+    }
+
+    /// 词条长度上限（Character 计，CJK 每字算 1）。超过视为整句/长片段，拒学。
+    private static let maxLearnLen = 12
+
+    /// 把「一↔1 / 二↔2 / 两↔2」这类数字写法归一，用于判断两串是否仅差在数字写法。
+    /// 归一后相等 = 差异纯粹是数字写法（ITN 后遗症），不该入学习字典。
+    private static func digitFormCanonical(_ s: String) -> String {
+        var out = s
+        for (cn, ar) in [("一", "1"), ("二", "2"), ("两", "2")] {
+            out = out.replacingOccurrences(of: cn, with: ar)
+        }
+        return out
     }
 
     /// 错音侧若本身是合法词，返回它的类别描述；否则 nil。

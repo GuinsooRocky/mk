@@ -72,7 +72,7 @@ tar -xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2 && rm sherpa
 识别错了？一行命令登记「错音 → 正字」，立即生效：
 
 ```bash
-MK --learn "depsick" "DeepSeek"
+/Applications/MK.app/Contents/MacOS/MK --learn "depsick" "DeepSeek"
 ```
 
 或者什么都不做：注入后你手动改了错字，MK 会自动学（菜单栏「自动学习我的修改」）。

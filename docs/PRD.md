@@ -161,7 +161,7 @@
 
 ### 7.2 实施路径 [已决 2026-05-08：路径 B 实测通过]
 
-**fork [Marvinngg/ambient-voice](https://github.com/Marvinngg/ambient-voice)** 加特化需求，**改名 MK**（com.lengmo.mk）。
+**fork [Marvinngg/ambient-voice](https://github.com/Marvinngg/ambient-voice)** 加特化需求，**改名 MK**（com.guinsoo.mk）。
 
 #### M0 体检结果（2026-05-08）
 
@@ -176,7 +176,7 @@
 **加分项**：B5（中英混杂）/ B6（日语 ja-JP）/ B8（延迟）均**未量化测试**，留作 M1 日常使用反推。
 
 #### M0 副产物决议
-- **改名**：WE → MK（菜单栏显示 / Bundle ID com.lengmo.mk / 数据目录暂保留 ~/.we/ 不动）
+- **改名**：WE → MK（菜单栏显示 / Bundle ID com.guinsoo.mk / 数据目录暂保留 ~/.we/ 不动）
 - **裁剪推迟**：25 个不需要的文件（会议 / 远程 / distillation）暂不删，等使用中真碍事再裁
 - **签名**：ad-hoc 签名跑通，Apple Developer 自签证书暂不做（每次 rebuild 要重授权，对体检阶段够用）
 - **关闭 polish**：~/.we/config.json 写 polish.enabled=false（避免 Ollama 健康检查 spam 日志）

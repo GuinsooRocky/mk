@@ -9,7 +9,7 @@ APP_RESOURCES = $(APP_CONTENTS)/Resources
 INSTALL_DIR = $(HOME)/Applications
 INSTALL_APP = $(INSTALL_DIR)/MK.app
 CERT_NAME = MK Development
-LAUNCHD_LABEL = com.lengmo.mk
+LAUNCHD_LABEL = com.guinsoo.mk
 LAUNCHD_PLIST = ~/Library/LaunchAgents/$(LAUNCHD_LABEL).plist
 
 build:
@@ -124,12 +124,12 @@ sync:
 install-sync:
 	@SCRIPT_PATH="$$(cd scripts && pwd)/sync-to-server.sh"; \
 	sed -e "s|__SYNC_SCRIPT__|$$SCRIPT_PATH|g" -e "s|__HOME__|$$HOME|g" \
-		scripts/com.lengmo.mk.sync.plist > ~/Library/LaunchAgents/com.lengmo.mk.sync.plist
-	@launchctl load ~/Library/LaunchAgents/com.lengmo.mk.sync.plist
+		scripts/com.guinsoo.mk.sync.plist > ~/Library/LaunchAgents/com.guinsoo.mk.sync.plist
+	@launchctl load ~/Library/LaunchAgents/com.guinsoo.mk.sync.plist
 	@echo "Auto-sync installed (triggers on voice-history.jsonl change)"
 
 # 卸载自动同步
 uninstall-sync:
-	@launchctl unload ~/Library/LaunchAgents/com.lengmo.mk.sync.plist 2>/dev/null || true
-	@rm -f ~/Library/LaunchAgents/com.lengmo.mk.sync.plist
+	@launchctl unload ~/Library/LaunchAgents/com.guinsoo.mk.sync.plist 2>/dev/null || true
+	@rm -f ~/Library/LaunchAgents/com.guinsoo.mk.sync.plist
 	@echo "Auto-sync uninstalled"

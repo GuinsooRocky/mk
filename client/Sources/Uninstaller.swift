@@ -8,8 +8,8 @@ import Foundation
 /// 删的内容：
 /// - `~/.mk/`（学习记录 / 字典 / 配置 / 录音 / 调试日志）
 /// - `~/Library/Mobile Documents/com~apple~CloudDocs/MK/`（iCloud Drive 同步的 learned）
-/// - `~/Library/Caches/com.lengmo.mk/`（系统给 .app 的运行时缓存）
-/// - `~/Library/HTTPStorages/com.lengmo.mk/`
+/// - `~/Library/Caches/com.guinsoo.mk/`（系统给 .app 的运行时缓存）
+/// - `~/Library/HTTPStorages/com.guinsoo.mk/`
 ///
 /// 不删（用户自己拖到废纸篓）：
 /// - `/Applications/MK.app`
@@ -23,8 +23,8 @@ enum Uninstaller {
         let targets: [(String, String)] = [
             ("~/.mk/",                                              "\(homeDir)/.mk"),
             ("~/Library/Mobile Documents/com~apple~CloudDocs/MK/",  "\(homeDir)/Library/Mobile Documents/com~apple~CloudDocs/MK"),
-            ("~/Library/Caches/com.lengmo.mk/",                     "\(homeDir)/Library/Caches/com.lengmo.mk"),
-            ("~/Library/HTTPStorages/com.lengmo.mk/",               "\(homeDir)/Library/HTTPStorages/com.lengmo.mk")
+            ("~/Library/Caches/com.guinsoo.mk/",                     "\(homeDir)/Library/Caches/com.guinsoo.mk"),
+            ("~/Library/HTTPStorages/com.guinsoo.mk/",               "\(homeDir)/Library/HTTPStorages/com.guinsoo.mk")
         ]
 
         // 体检

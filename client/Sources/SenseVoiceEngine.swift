@@ -10,7 +10,7 @@ final class SenseVoiceEngine: @unchecked Sendable {
     static let shared = SenseVoiceEngine()
 
     /// recognizer 只在此队列上创建/访问，保证 sherpa-onnx C 句柄不被并发触碰。
-    private let queue = DispatchQueue(label: "com.lengmo.mk.sensevoice", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.guinsoo.mk.sensevoice", qos: .userInitiated)
     private var recognizer: SherpaOnnxOfflineRecognizer?
     private var vad: SherpaOnnxVoiceActivityDetectorWrapper?
 

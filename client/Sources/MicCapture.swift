@@ -19,7 +19,7 @@ final class MicCapture {
     var keepAliveSec: Double = 6.0
 
     /// 采集 delegate 回调队列（供 VoiceSession setSampleBufferDelegate 用）。
-    let captureQueue = DispatchQueue(label: "com.lengmo.mk.audio-capture")
+    let captureQueue = DispatchQueue(label: "com.guinsoo.mk.audio-capture")
 
     private var session: AVCaptureSession?
     private var deviceInput: AVCaptureDeviceInput?

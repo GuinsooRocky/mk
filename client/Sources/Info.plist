@@ -7,7 +7,7 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.lengmo.mk</string>
+	<string>com.guinsoo.mk</string>
 	<key>CFBundleName</key>
 	<string>MK</string>
 	<key>CFBundlePackageType</key>

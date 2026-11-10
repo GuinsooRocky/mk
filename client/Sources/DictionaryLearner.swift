@@ -185,7 +185,7 @@ enum DictionaryLearner {
 
     /// Darwin 通知名：`mk --learn` CLI 进程写完 learned 字典后 post，
     /// 常驻 daemon 的 observer 收到 → reload。AppDelegate 启动时注册 observer。
-    static let reloadNotificationName = "com.lengmo.mk.dict-learned"
+    static let reloadNotificationName = "com.guinsoo.mk.dict-learned"
 
     /// 广播 reload 通知（learn() 写完字典后调）
     private static func postReloadNotification() {
